@@ -1,0 +1,109 @@
+import os
+import sys
+from typing import List
+from google import genai
+from google.genai import types
+from pydantic import BaseModel
+from src.config import settings
+from src.retrieval.retriever import RetrievedChunk, Retriever
+
+SYSTEM_PROMPT = """You are an expert AI Engineering Intelligence Assistant analyzing the Campus Connect codebase.
+
+Your mission is to answer engineering questions accurately, concisely, and strictly grounded in the provided code/docs chunks.
+
+RULES:
+1. Base your answer ONLY on the provided context chunks.
+2. For every claim, architectural fact, or code location, cite the source using the exact format: `[filepath#Lstart-Lend]`.
+3. If the provided context does not contain enough information to answer the question, clearly state: "I cannot find sufficient information in the codebase to answer this question." Do NOT hallucinate non-existent files or functions.
+4. Provide actionable, technical explanations with relevant code references.
+"""
+
+
+class SourceCitation(BaseModel):
+    file_path: str
+    start_line: int
+    end_line: int
+    citation: str
+
+
+class AnswerResponse(BaseModel):
+    question: str
+    answer: str
+    sources: List[SourceCitation]
+
+
+class AnswerGenerator:
+    def __init__(self):
+        if not settings.gemini_api_key or settings.gemini_api_key == "your_gemini_api_key_here":
+            print(
+                "⚠️ Warning: GEMINI_API_KEY is not set in .env. Please add your free key from https://aistudio.google.com/"
+            )
+        self.client = genai.Client(api_key=settings.gemini_api_key)
+        self.model_name = "gemini-2.5-flash-lite"
+
+    def _build_context_block(self, chunks: List[RetrievedChunk]) -> str:
+        parts = []
+        for i, chunk in enumerate(chunks):
+            parts.append(
+                f"--- CHUNK {i+1}: [{chunk.citation}] (Type: {chunk.file_type}) ---\n"
+                f"{chunk.content}\n"
+            )
+        return "\n".join(parts)
+
+    def generate(self, question: str, chunks: List[RetrievedChunk]) -> AnswerResponse:
+        context_str = self._build_context_block(chunks)
+        user_prompt = (
+            f"Context from codebase:\n"
+            f"{context_str}\n\n"
+            f"Question: {question}\n\n"
+            f"Answer with citations:"
+        )
+
+        response = self.client.models.generate_content(
+            model=self.model_name,
+            contents=user_prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                temperature=0.1,
+            ),
+        )
+
+        answer_text = response.text or ""
+
+        # Extract unique sources cited in the retrieved chunks
+        sources = [
+            SourceCitation(
+                file_path=c.file_path,
+                start_line=c.start_line,
+                end_line=c.end_line,
+                citation=c.citation,
+            )
+            for c in chunks
+        ]
+
+        return AnswerResponse(
+            question=question,
+            answer=answer_text,
+            sources=sources,
+        )
+
+
+if __name__ == "__main__":
+    query = (
+        sys.argv[1]
+        if len(sys.argv) > 1
+        else "What database models are defined in this project?"
+    )
+    print(f"\n❓ Question: {query}\n")
+
+    retriever = Retriever()
+    chunks = retriever.retrieve(query, top_k=5)
+
+    generator = AnswerGenerator()
+    result = generator.generate(query, chunks)
+
+    print("💡 Answer:\n")
+    print(result.answer)
+    print("\n📚 Sources Retrieved:")
+    for s in result.sources:
+        print(f"  - {s.citation}")

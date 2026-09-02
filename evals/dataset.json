@@ -1,0 +1,199 @@
+[
+  {
+    "id": "q001",
+    "category": "code_location",
+    "question": "Where is user authentication implemented?",
+    "expected_sources": [
+      "src/lib/utils/auth.utils.server.ts",
+      "src/actions/authentication/login-actions.ts"
+    ],
+    "expected_answer_summary": "Implemented in AuthUtils server utility with session management and in login server actions."
+  },
+  {
+    "id": "q002",
+    "category": "config_schema_lookup",
+    "question": "How is the database schema defined in this project?",
+    "expected_sources": [
+      "prisma/schema.prisma",
+      "prisma/migrations/20260609160102_init/migration.sql"
+    ],
+    "expected_answer_summary": "Defined using Prisma ORM in prisma/schema.prisma and versioned SQL migration files."
+  },
+  {
+    "id": "q003",
+    "category": "architecture_navigation",
+    "question": "What is the overall architecture and service topology of Campus Connect?",
+    "expected_sources": [
+      "ARCHITECTURE.md",
+      "README.md"
+    ],
+    "expected_answer_summary": "Next.js App router full-stack architecture with PostgreSQL, Redis for queues, background workers, and Nginx reverse proxy."
+  },
+  {
+    "id": "q004",
+    "category": "onboarding",
+    "question": "How do I start the development environment locally using Docker?",
+    "expected_sources": [
+      "README.md",
+      "compose.dev.yml",
+      "compose.yml"
+    ],
+    "expected_answer_summary": "Run docker compose with the dev compose configuration to spin up postgres, redis, minio, and next.js."
+  },
+  {
+    "id": "q005",
+    "category": "config_schema_lookup",
+    "question": "What environment variables are required for setting up the application?",
+    "expected_sources": [
+      ".env.example"
+    ],
+    "expected_answer_summary": "Database URLs, Redis connection, session secrets, MinIO credentials, and port configs defined in .env.example."
+  },
+  {
+    "id": "q006",
+    "category": "code_location",
+    "question": "Where is the Prometheus metrics endpoint defined?",
+    "expected_sources": [
+      "src/app/api/metrics/route.ts"
+    ],
+    "expected_answer_summary": "Exposed as a Next.js App Router API route at src/app/api/metrics/route.ts."
+  },
+  {
+    "id": "q007",
+    "category": "dependency_reasoning",
+    "question": "What services or components depend on Redis?",
+    "expected_sources": [
+      "ARCHITECTURE.md",
+      "compose.yml",
+      "compose.dev.yml"
+    ],
+    "expected_answer_summary": "Redis is used for caching, session management, and BullMQ background task workers."
+  },
+  {
+    "id": "q008",
+    "category": "change_analysis",
+    "question": "Which migration added batch delivery and tracking milestones?",
+    "expected_sources": [
+      "prisma/migrations/20260613082504_add_new_features/migration.sql"
+    ],
+    "expected_answer_summary": "The migration 20260613082504_add_new_features added BatchDeliveryStatus and milestone tracking."
+  },
+  {
+    "id": "q009",
+    "category": "debugging_assistance",
+    "question": "What error is thrown when an unauthenticated user accesses a protected route?",
+    "expected_sources": [
+      "src/lib/utils/auth.utils.server.ts"
+    ],
+    "expected_answer_summary": "AuthUtils throws an UnauthenticatedError or redirects unauthenticated sessions."
+  },
+  {
+    "id": "q010",
+    "category": "onboarding",
+    "question": "What test framework and test runners are used in this repository?",
+    "expected_sources": [
+      "vitest.config.ts",
+      "package.json"
+    ],
+    "expected_answer_summary": "Vitest is configured for unit and integration testing."
+  },
+  {
+    "id": "q011",
+    "category": "architecture_navigation",
+    "question": "How are background workers and asynchronous jobs handled?",
+    "expected_sources": [
+      "ARCHITECTURE.md",
+      "tsconfig.worker.json"
+    ],
+    "expected_answer_summary": "Separate background worker processes using TypeScript and worker configurations."
+  },
+  {
+    "id": "q012",
+    "category": "code_location",
+    "question": "Where are user profile cards and UI display components located?",
+    "expected_sources": [
+      "src/components/profile/profile-card.tsx"
+    ],
+    "expected_answer_summary": "In the React components directory under src/components/profile/profile-card.tsx."
+  },
+  {
+    "id": "q013",
+    "category": "dependency_reasoning",
+    "question": "What models and tables are related to the Cart in the database?",
+    "expected_sources": [
+      "prisma/schema.prisma",
+      "prisma/migrations/20260609160102_init/migration.sql"
+    ],
+    "expected_answer_summary": "Cart relates to CartItem, User, and Product."
+  },
+  {
+    "id": "q014",
+    "category": "config_schema_lookup",
+    "question": "How is Nginx configured as a reverse proxy?",
+    "expected_sources": [
+      "compose.yml",
+      "compose.prod.yml"
+    ],
+    "expected_answer_summary": "Configured as an Nginx container proxying port 80/8080 to the Next.js app."
+  },
+  {
+    "id": "q015",
+    "category": "onboarding",
+    "question": "Which package manager is used to install and manage dependencies in this project?",
+    "expected_sources": [
+      "pnpm-workspace.yaml",
+      "package.json",
+      "README.md"
+    ],
+    "expected_answer_summary": "pnpm is the package manager with workspace support."
+  },
+  {
+    "id": "q016",
+    "category": "debugging_assistance",
+    "question": "What fields are stored in the UserAddress model?",
+    "expected_sources": [
+      "prisma/schema.prisma",
+      "prisma/migrations/20260609160102_init/migration.sql"
+    ],
+    "expected_answer_summary": "Stores hostel_block, building, room_number, and user_id."
+  },
+  {
+    "id": "q017",
+    "category": "code_location",
+    "question": "Where are database integration tests for authorization located?",
+    "expected_sources": [
+      "tests/integration/authz/auth-helpers.test.ts"
+    ],
+    "expected_answer_summary": "Located in tests/integration/authz/auth-helpers.test.ts."
+  },
+  {
+    "id": "q018",
+    "category": "architecture_navigation",
+    "question": "What object storage service is used for media uploads?",
+    "expected_sources": [
+      "compose.dev.yml",
+      "compose.yml",
+      "ARCHITECTURE.md"
+    ],
+    "expected_answer_summary": "MinIO is used for S3-compatible local object storage."
+  },
+  {
+    "id": "q019",
+    "category": "config_schema_lookup",
+    "question": "What database provider is configured in the Prisma schema?",
+    "expected_sources": [
+      "prisma/schema.prisma"
+    ],
+    "expected_answer_summary": "PostgreSQL is configured as the datasource provider in prisma/schema.prisma."
+  },
+  {
+    "id": "q020",
+    "category": "change_analysis",
+    "question": "What core tables were created in the initial migration?",
+    "expected_sources": [
+      "prisma/migrations/20260609160102_init/migration.sql"
+    ],
+    "expected_answer_summary": "Tables including user, account, session, product, category, cart, and building."
+  }
+]
+
