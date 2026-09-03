@@ -50,6 +50,48 @@ class CodeAwareChunker:
         next_search = idx + len(chunk_text.strip()[:60])
         return start_line, end_line, next_search
 
+    @staticmethod
+    def _build_semantic_prefix(file_path: Path, rel_path: str) -> str:
+        """
+        Generate a human-readable preamble for config files.
+
+        Embedding models (like BGE-small) understand prose but struggle
+        with raw YAML service blocks, SQL DDL, and KEY=VALUE env files.
+        Prepending a short natural-language description lets the model
+        connect queries like "What depends on Redis?" to a YAML chunk
+        that only says `redis: image: redis:8.2.1-alpine`.
+        """
+        name = file_path.name.lower()
+        ext = file_path.suffix.lower()
+
+        # Docker Compose files — describe the infrastructure services defined
+        if name.startswith("compose") and ext in (".yml", ".yaml"):
+            label = name.replace(".yml", "").replace(".yaml", "")
+            return (
+                f"# Docker Compose infrastructure definition: {rel_path}\n"
+                f"# This file ({label}) defines the services, networks, and volumes\n"
+                f"# for the application stack including databases, caches, object storage, and workers.\n\n"
+            )
+
+        # SQL migration files
+        if ext == ".sql" and "migration" in rel_path.lower():
+            # Extract the migration directory name for context
+            migration_dir = file_path.parent.name  # e.g. "20260613082504_add_new_features"
+            return (
+                f"-- Database migration file: {rel_path}\n"
+                f"-- Migration: {migration_dir}\n"
+                f"-- This SQL migration creates or alters database tables, columns, indexes, and constraints.\n\n"
+            )
+
+        # Dotenv files
+        if name.startswith(".env"):
+            return (
+                f"# Environment variables configuration file: {rel_path}\n"
+                f"# This file lists all required environment variables for the application.\n\n"
+            )
+
+        return ""
+
     def chunk_file(self, file_path:Path, rel_path:str) -> List[CodeChunk]:
         try:
             full_text = file_path.read_text(encoding="utf-8", errors="ignore")
@@ -59,19 +101,28 @@ class CodeAwareChunker:
             return []
 
         ext = file_path.suffix.lower()
+        name = file_path.name
         chunks = []
 
+        # Prepend semantic context so embeddings can match natural-language
+        # queries against config files that are otherwise raw YAML/SQL/env
+        prefix = self._build_semantic_prefix(file_path, rel_path)
+        text_to_split = prefix + full_text if prefix else full_text
+
         if ext in [".ts", ".tsx"]:
-            raw_chunks = self.ts_splitter.split_text(full_text)
+            raw_chunks = self.ts_splitter.split_text(text_to_split)
             file_type = "code"
         elif ext == ".md":
-            raw_chunks = self.md_splitter.split_text(full_text)
+            raw_chunks = self.md_splitter.split_text(text_to_split)
             file_type = "markdown"
         elif ext == ".prisma":
-            raw_chunks = self.generic_splitter.split_text(full_text)
+            raw_chunks = self.generic_splitter.split_text(text_to_split)
             file_type = "schema"
+        elif ext == ".sql":
+            raw_chunks = self.generic_splitter.split_text(text_to_split)
+            file_type = "migration"
         else:
-            raw_chunks = self.generic_splitter.split_text(full_text)
+            raw_chunks = self.generic_splitter.split_text(text_to_split)
             file_type = "config"
 
         search_pos = 0
@@ -91,3 +142,4 @@ class CodeAwareChunker:
                 )
             )
         return chunks
+

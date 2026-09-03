@@ -19,3 +19,5 @@ corpus/
 *.log
 scratch/
 .pytest_cache/
+# Embedding cache (local only)
+.cache/

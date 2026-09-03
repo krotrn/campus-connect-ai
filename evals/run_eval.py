@@ -1,7 +1,7 @@
 import json
 import time
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict
 from src.retrieval.retriever import Retriever
 
 
@@ -68,8 +68,8 @@ def evaluate_retrieval(dataset_path: Path = Path("evals/dataset.json")):
     mrr = (sum(reciprocal_ranks) / total)
     avg_latency = sum(latencies) / len(latencies)
 
-    print("\n" + "=" * 60)
-    print("📈 RETRIEVAL EVALUATION RESULTS (V1 BASELINE - DENSE ONLY)")
+    print(f"\n{'=' * 60}")
+    print("📈 RETRIEVAL EVALUATION RESULTS (V2 — HYBRID + RERANK)")
     print("=" * 60)
     print(f"Total Test Cases:       {total}")
     print(f"Recall@5:               {recall_5:.1f}% ({hits_at_5}/{total})")
