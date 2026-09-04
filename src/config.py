@@ -9,5 +9,7 @@ class Settings(BaseSettings):
     corpus_path:Path = Path(".corpus/campus-connect")
     embedding_model:str = "BAAI/bge-small-en-v1.5"
     embedding_dim:int = 384
+    api_key:str = "dev-key-change-me"
+    rate_limit:str = "20/minute"
 
 settings = Settings()

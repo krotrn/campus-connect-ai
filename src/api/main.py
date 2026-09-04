@@ -1,14 +1,27 @@
 import time
 from contextlib import asynccontextmanager
 from typing import List, Optional
-from fastapi import FastAPI, HTTPException, status
+
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+
+from src.api.tasks import IngestionStatus, get_status, trigger_ingestion
 from src.config import settings
 from src.generation.generator import AnswerGenerator, SourceCitation
 from src.retrieval.retriever import Retriever
 
-# Singleton instances initialized on startup
+# ─────────────────────────────────────────────────────────────────────────────
+# Rate Limiter
+# ─────────────────────────────────────────────────────────────────────────────
+limiter = Limiter(key_func=get_remote_address)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Singleton services
+# ─────────────────────────────────────────────────────────────────────────────
 services = {}
 
 
@@ -24,9 +37,12 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="AI Engineering Intelligence Assistant (AEIA)",
     description="Grounded code and architecture intelligence assistant for Campus Connect.",
-    version="0.1.0",
+    version="0.2.0",
     lifespan=lifespan,
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -37,6 +53,21 @@ app.add_middleware(
 )
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Auth dependency
+# ─────────────────────────────────────────────────────────────────────────────
+async def verify_api_key(x_api_key: str = Header(..., alias="X-API-Key")):
+    """Validate the X-API-Key header against the configured key."""
+    if x_api_key != settings.api_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing API key",
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Request / Response Models
+# ─────────────────────────────────────────────────────────────────────────────
 class AskRequest(BaseModel):
     question: str = Field(
         ...,
@@ -66,6 +97,17 @@ class HealthResponse(BaseModel):
     qdrant_url: str
 
 
+class IngestionResponse(BaseModel):
+    status: str
+    message: str
+    chunks_ingested: int = 0
+    files_processed: int = 0
+    error: Optional[str] = None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Public endpoints (no auth)
+# ─────────────────────────────────────────────────────────────────────────────
 @app.get("/", tags=["General"])
 async def root():
     return {
@@ -99,8 +141,17 @@ async def health_check():
         )
 
 
-@app.post("/ask", response_model=AskResponse, tags=["RAG"])
-async def ask_question(request: AskRequest):
+# ─────────────────────────────────────────────────────────────────────────────
+# Protected endpoints (auth + rate limit)
+# ─────────────────────────────────────────────────────────────────────────────
+@app.post(
+    "/ask",
+    response_model=AskResponse,
+    tags=["RAG"],
+    dependencies=[Depends(verify_api_key)],
+)
+@limiter.limit(settings.rate_limit)
+async def ask_question(request: Request, body: AskRequest):
     retriever: Optional[Retriever] = services.get("retriever")
     generator: Optional[AnswerGenerator] = services.get("generator")
 
@@ -114,15 +165,15 @@ async def ask_question(request: AskRequest):
 
     try:
         # 1. Retrieve top-K grounded chunks
-        chunks = retriever.retrieve(request.question, top_k=request.top_k)
+        chunks = retriever.retrieve(body.question, top_k=body.top_k)
 
         # 2. Generate grounded answer
-        result = generator.generate(request.question, chunks)
+        result = generator.generate(body.question, chunks)
 
         latency_ms = round((time.time() - start_time) * 1000, 2)
 
         return AskResponse(
-            question=request.question,
+            question=body.question,
             answer=result.answer,
             sources=result.sources,
             latency_ms=latency_ms,
@@ -132,3 +183,43 @@ async def ask_question(request: AskRequest):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error processing question: {str(e)}",
         )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Ingestion endpoints (auth-protected, no rate limit)
+# ─────────────────────────────────────────────────────────────────────────────
+@app.post(
+    "/ingest",
+    response_model=IngestionResponse,
+    tags=["Ingestion"],
+    dependencies=[Depends(verify_api_key)],
+)
+async def start_ingestion():
+    """Trigger background re-ingestion of the corpus."""
+    started = await trigger_ingestion()
+    if not started:
+        return IngestionResponse(
+            status=IngestionStatus.RUNNING,
+            message="Ingestion is already running",
+        )
+    return IngestionResponse(
+        status=IngestionStatus.RUNNING,
+        message="Ingestion started in background",
+    )
+
+
+@app.get(
+    "/ingest/status",
+    response_model=IngestionResponse,
+    tags=["Ingestion"],
+)
+async def ingestion_status():
+    """Check the status of the last ingestion run."""
+    state = get_status()
+    return IngestionResponse(
+        status=state["status"],
+        message=f"Ingestion is {state['status']}",
+        chunks_ingested=state.get("chunks_ingested", 0),
+        files_processed=state.get("files_processed", 0),
+        error=state.get("error"),
+    )
