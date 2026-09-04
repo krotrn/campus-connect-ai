@@ -1,6 +1,6 @@
 [project]
 name = "aeia"
-version = "0.3.0"
+version = "0.4.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.14"
@@ -12,6 +12,7 @@ dependencies = [
     "langchain-text-splitters>=1.1.2",
     "langfuse>=4.15.1",
     "langgraph>=1.2.0",
+    "mcp>=2.1.0",
     "onnxruntime>=1.29.0",
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",

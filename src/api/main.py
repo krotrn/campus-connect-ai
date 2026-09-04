@@ -4,6 +4,8 @@ from typing import List, Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from google.genai.errors import APIError
 from pydantic import BaseModel, Field
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -12,7 +14,15 @@ from slowapi.util import get_remote_address
 from src.agent import create_agent_graph
 from src.api.tasks import IngestionStatus, get_status, trigger_ingestion
 from src.config import settings
+from src.errors import (
+    AEIAError,
+    CorpusUnavailableError,
+    LLMQuotaExceededError,
+    LLMServiceUnavailableError,
+    VectorDBUnavailableError,
+)
 from src.generation.generator import AnswerGenerator, SourceCitation
+from src.mcp import get_streamable_http_app, mcp_server
 from src.observability import flush as langfuse_flush, init_langfuse, traced_ask
 from src.retrieval.retriever import Retriever
 
@@ -29,31 +39,86 @@ services = {}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("🚀 Initializing AEIA Retriever and Generator...")
-    services["retriever"] = Retriever()
-    services["generator"] = AnswerGenerator()
-    print("🚀 Initializing AEIA Retriever, Generator, and Agent...")
+    print("🚀 Initializing AEIA Retriever, Generator, Agent, and MCP Server...")
     retriever = Retriever()
     generator = AnswerGenerator()
     services["retriever"] = retriever
     services["generator"] = generator
     services["agent"] = create_agent_graph(retriever, generator)
     init_langfuse()
-    yield
-    langfuse_flush()
-    services.clear()
+    try:
+        async with mcp_server.session_manager.run():
+            yield  # Application is running and serving requests
+    finally:
+        # Runs only on server shutdown
+        mcp_server.session_manager._has_started = False
+        langfuse_flush()
+        services.clear()
 
 
 app = FastAPI(
     title="AI Engineering Intelligence Assistant (AEIA)",
     description="Grounded code and architecture intelligence assistant for Campus Connect.",
-    version="0.2.0",
-    version="0.3.0",
+    version="0.4.0",
     lifespan=lifespan,
 )
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+@app.exception_handler(AEIAError)
+async def aeia_error_handler(request: Request, exc: AEIAError):
+    headers = {}
+    if isinstance(exc, LLMQuotaExceededError) and exc.retry_after:
+        headers["Retry-After"] = str(exc.retry_after)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": exc.error_code,
+            "message": exc.message,
+            "detail": exc.message,
+        },
+        headers=headers if headers else None,
+    )
+
+
+@app.exception_handler(APIError)
+async def google_api_error_handler(request: Request, exc: APIError):
+    status_code = getattr(exc, "code", 500) or 500
+    message = getattr(exc, "message", str(exc))
+
+    if status_code == 429 or "RESOURCE_EXHAUSTED" in message:
+        return JSONResponse(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            content={
+                "error": "LLM_QUOTA_EXHAUSTED",
+                "message": "Upstream Gemini LLM quota exhausted. Please try again later.",
+                "detail": message,
+            },
+        )
+    elif status_code in (502, 503, 504):
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "error": "LLM_SERVICE_UNAVAILABLE",
+                "message": "Upstream Gemini LLM service is temporarily unavailable.",
+                "detail": message,
+            },
+        )
+    else:
+        return JSONResponse(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            content={
+                "error": "LLM_GATEWAY_ERROR",
+                "message": f"Upstream Gemini LLM returned error code {status_code}.",
+                "detail": message,
+            },
+        )
+
+
+# Mount Model Context Protocol (MCP) Streamable HTTP endpoint (2026-07-28 spec)
+app.mount("/mcp", get_streamable_http_app())
 
 app.add_middleware(
     CORSMiddleware,
@@ -177,7 +242,7 @@ async def health_check():
         )
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Qdrant connection error: {str(e)}",
         )
 
@@ -237,6 +302,8 @@ async def ask_question(request: Request, body: AskRequest):
             sources=result["sources"],
             latency_ms=result["latency_ms"],
         )
+    except (AEIAError, APIError, HTTPException):
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -278,6 +345,8 @@ async def agent_ask(request: Request, body: AgentAskRequest):
             steps_taken=final_state.get("steps_taken", []),
             latency_ms=latency_ms,
         )
+    except (AEIAError, APIError, HTTPException):
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

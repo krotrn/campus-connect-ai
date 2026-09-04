@@ -12,6 +12,8 @@
 - **Production Hardening (V3)**: API Key authentication (`X-API-Key`), client rate limiting (`slowapi`), background async ingestion queue, and GitHub Actions CI.
 - **Observability (V4)**: Full-lifecycle request tracing with Langfuse across retrieval and LLM generation spans.
 - **Agentic Layer (V5)**: Explicit **LangGraph** state machine that routes queries between direct hybrid RAG and non-RAG tools (git commit history, commit diff inspection, reverse module dependency tracking).
+- **Model Context Protocol (V6)**: Exposes codebase intelligence as an official **MCP Server** (2026-07-28 stateless HTTP spec) with granular tools (`search_campus_connect`, `explain_codebase_query`, `get_commit_history`, etc.).
+- **Graceful Error Resilience & Quota Degradation (V7)**: Centralized exception handling across domain and upstream Gemini API errors (`429 RESOURCE_EXHAUSTED`, `503 SERVICE_UNAVAILABLE`), providing grounded code context fallback even during LLM quota exhaustion.
 
 ---
 
@@ -103,17 +105,19 @@ Evaluated on **20 golden test cases** in [`evals/dataset.json`](evals/dataset.js
 ```
 src/
   agent/        LangGraph state machine, query router, non-RAG tools
-  api/          FastAPI server (POST /ask, POST /agent/ask, POST /ingest, GET /health)
+  api/          FastAPI server (POST /ask, POST /agent/ask, POST /ingest, GET /health, /mcp)
+  mcp/          Model Context Protocol server (2026-07-28 stateless HTTP spec)
   ingestion/    Chunker with semantic prefixes + embedding cache pipeline
   retrieval/    Hybrid retriever (BM25 + dense + weighted RRF)
   generation/   Gemini-powered grounded answer generator
   observability/Langfuse tracing wrapper with spans
+  errors.py     Typed domain exception hierarchy
   config.py     Pydantic settings
 evals/
   dataset.json  20 golden test cases
   run_eval.py   Recall@5, Recall@10, MRR benchmark suite
 docs/
-  decisions/    15 Architectural Decision Records (ADRs)
+  decisions/    17 Architectural Decision Records (ADRs)
   postmortems/  Documented failure investigation case studies
 tests/          Unit and integration test suites
 ```
@@ -147,3 +151,5 @@ Key architectural decisions are documented in [`docs/decisions/`](docs/decisions
 - [0013 — V3 Production Hardening](docs/decisions/0013-v3-production-hardening.md)
 - [0014 — V4 Observability with Langfuse Tracing](docs/decisions/0014-v4-observability-langfuse-tracing.md)
 - [0015 — V5 Agentic Router with LangGraph](docs/decisions/0015-v5-agentic-router-langgraph.md)
+- [0016 — V6 Model Context Protocol Server](docs/decisions/0016-v6-model-context-protocol-server.md)
+- [0017 — Error Handling & Upstream Degradation](docs/decisions/0017-error-handling-and-upstream-degradation.md)

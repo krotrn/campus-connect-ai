@@ -9,6 +9,7 @@ from rank_bm25 import BM25Okapi
 from flashrank import Ranker, RerankRequest
 
 from src.config import settings
+from src.errors import VectorDBUnavailableError
 
 RRF_K = 60  # standard constant for Reciprocal Rank Fusion
 DENSE_WEIGHT = 0.7
@@ -79,12 +80,16 @@ class Retriever:
     # ─────────────────────────────────────────────────────────────────────────
 
     def _retrieve_dense(self, query: str, top_k: int) -> List[RetrievedChunk]:
-        query_vector = list(self.embedding_model.embed(query))[0].tolist()
-        results = self.client.query_points(
-            collection_name=settings.collection_name,
-            query=query_vector,
-            limit=top_k,
-        )
+        try:
+            query_vector = list(self.embedding_model.embed(query))[0].tolist()
+            results = self.client.query_points(
+                collection_name=settings.collection_name,
+                query=query_vector,
+                limit=top_k,
+            )
+        except Exception as e:
+            raise VectorDBUnavailableError(f"Qdrant vector query failed: {str(e)}") from e
+
         chunks = []
         for point in results.points:
             payload = point.payload or {}
@@ -205,19 +210,22 @@ class Retriever:
         """Fetch every point payload from Qdrant to build the BM25 corpus."""
         all_payloads = []
         next_offset = None
-        while True:
-            records, next_offset = self.client.scroll(
-                collection_name=settings.collection_name,
-                limit=256,
-                offset=next_offset,
-                with_payload=True,
-                with_vectors=False,
-            )
-            for r in records:
-                all_payloads.append(r.payload or {})
-            if next_offset is None:
-                break
-        return all_payloads
+        try:
+            while True:
+                records, next_offset = self.client.scroll(
+                    collection_name=settings.collection_name,
+                    limit=256,
+                    offset=next_offset,
+                    with_payload=True,
+                    with_vectors=False,
+                )
+                for r in records:
+                    all_payloads.append(r.payload or {})
+                if next_offset is None:
+                    break
+            return all_payloads
+        except Exception as e:
+            raise VectorDBUnavailableError(f"Failed to scroll Qdrant payloads: {str(e)}") from e
 
     @staticmethod
     def _tokenize(text: str) -> List[str]:

@@ -5,6 +5,7 @@ from google import genai
 from google.genai import types
 from pydantic import BaseModel
 from src.config import settings
+from src.errors import LLMQuotaExceededError
 from src.retrieval.retriever import RetrievedChunk, Retriever
 
 SYSTEM_PROMPT = """You are an expert AI Engineering Intelligence Assistant analyzing the Campus Connect codebase.
@@ -33,13 +34,14 @@ class AnswerResponse(BaseModel):
 
 
 class AnswerGenerator:
-    def __init__(self):
+    def __init__(self, model_name: str = "gemini-3.6-flash", raise_on_quota: bool = False):
         if not settings.gemini_api_key or settings.gemini_api_key == "your_gemini_api_key_here":
             print(
                 "⚠️ Warning: GEMINI_API_KEY is not set in .env. Please add your free key from https://aistudio.google.com/"
             )
         self.client = genai.Client(api_key=settings.gemini_api_key)
-        self.model_name = "gemini-2.5-flash-lite"
+        self.model_name = model_name
+        self.raise_on_quota = raise_on_quota
 
     def _build_context_block(self, chunks: List[RetrievedChunk]) -> str:
         parts = []
@@ -51,26 +53,6 @@ class AnswerGenerator:
         return "\n".join(parts)
 
     def generate(self, question: str, chunks: List[RetrievedChunk]) -> AnswerResponse:
-        context_str = self._build_context_block(chunks)
-        user_prompt = (
-            f"Context from codebase:\n"
-            f"{context_str}\n\n"
-            f"Question: {question}\n\n"
-            f"Answer with citations:"
-        )
-
-        response = self.client.models.generate_content(
-            model=self.model_name,
-            contents=user_prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
-                temperature=0.1,
-            ),
-        )
-
-        answer_text = response.text or ""
-
-        # Extract unique sources cited in the retrieved chunks
         sources = [
             SourceCitation(
                 file_path=c.file_path,
@@ -80,6 +62,67 @@ class AnswerGenerator:
             )
             for c in chunks
         ]
+
+        if not settings.gemini_api_key or settings.gemini_api_key == "your_gemini_api_key_here":
+            return AnswerResponse(
+                question=question,
+                answer=(
+                    "⚠️ **Notice**: `GEMINI_API_KEY` is not configured in `.env`. "
+                    "To enable AI generation, obtain a free API key from https://aistudio.google.com/. "
+                    "Displaying retrieved codebase citations directly below."
+                ),
+                sources=sources,
+            )
+
+        context_str = self._build_context_block(chunks)
+        user_prompt = (
+            f"Context from codebase:\n"
+            f"{context_str}\n\n"
+            f"Question: {question}\n\n"
+            f"Answer with citations:"
+        )
+
+        answer_text = ""
+        last_error = None
+        for model in [self.model_name, "gemini-2.5-flash-lite"]:
+            try:
+                response = self.client.models.generate_content(
+                    model=model,
+                    contents=user_prompt,
+                    config=types.GenerateContentConfig(
+                        system_instruction=SYSTEM_PROMPT,
+                        temperature=0.1,
+                    ),
+                )
+                if response and response.text:
+                    answer_text = response.text
+                    break
+            except Exception as e:
+                last_error = e
+                # If 429 quota or connection error, try next candidate model
+                continue
+
+        # If all LLM candidates failed, provide graceful degraded fallback instead of crashing
+        if not answer_text and last_error:
+            err_str = str(last_error)
+            is_quota = "RESOURCE_EXHAUSTED" in err_str or "429" in err_str
+            if is_quota and self.raise_on_quota:
+                raise LLMQuotaExceededError(f"Gemini API quota exhausted: {err_str}")
+
+            if is_quota:
+                answer_text = (
+                    "⚠️ **Upstream AI Quota Exceeded (HTTP 429)**: The Gemini generation quota has been temporarily reached. "
+                    "Below are the exact grounded context chunks retrieved for your question:\n\n"
+                    + "\n\n".join(
+                        f"**Source: `{c.citation}`** ({c.file_type})\n```\n{c.content[:250].strip()}...\n```"
+                        for c in chunks[:3]
+                    )
+                )
+            else:
+                answer_text = (
+                    f"⚠️ **AI Service Warning**: An upstream model error occurred ({type(last_error).__name__}). "
+                    f"Showing retrieved source references directly below."
+                )
 
         return AnswerResponse(
             question=question,

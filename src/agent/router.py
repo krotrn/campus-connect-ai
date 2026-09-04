@@ -71,7 +71,7 @@ def classify_route_llm(question: str) -> Tuple[str, str, str]:
     try:
         client = genai.Client(api_key=settings.gemini_api_key)
         response = client.models.generate_content(
-            model="gemini-2.5-flash-lite",
+            model="gemini-3.6-flash",
             contents=f"User Query: {question}",
             config=types.GenerateContentConfig(
                 system_instruction=ROUTER_SYSTEM_PROMPT,
