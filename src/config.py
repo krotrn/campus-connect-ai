@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     gemini_api_key:str = ""
     qdrant_url:str = "http://localhost:6333"
     collection_name:str = "campus_connect"
-    corpus_path:Path = Path(".corpus/campus-connect")
+    corpus_path:Path = Path("./corpus/campus-connect")
     embedding_model:str = "BAAI/bge-small-en-v1.5"
     embedding_dim:int = 384
     api_key:str = "dev-key-change-me"

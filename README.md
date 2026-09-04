@@ -1,26 +1,49 @@
 # AEIA — AI Engineering Intelligence Assistant
 
-> A grounded RAG system for the [Campus Connect](https://github.com/krotrn/campus-connect) codebase.
-> Ask natural-language questions about the code and get cited, line-level answers.
+> A grounded RAG and Agentic code intelligence system for the [Campus Connect](https://github.com/krotrn/campus-connect) codebase (~94k LOC).
+> Ask natural-language questions about code, architecture, git history, and dependencies with verified citations.
+
+---
+
+## Features
+
+- **Hybrid Retrieval (V2)**: Combines dense semantic search (BGE-small) with sparse lexical BM25 fused via Weighted Reciprocal Rank Fusion (RRF 70/30).
+- **Semantic Prefix Enrichment**: Prepend natural-language contextual headers to raw Docker Compose, SQL migrations, and dotenv files to ensure discoverability.
+- **Production Hardening (V3)**: API Key authentication (`X-API-Key`), client rate limiting (`slowapi`), background async ingestion queue, and GitHub Actions CI.
+- **Observability (V4)**: Full-lifecycle request tracing with Langfuse across retrieval and LLM generation spans.
+- **Agentic Layer (V5)**: Explicit **LangGraph** state machine that routes queries between direct hybrid RAG and non-RAG tools (git commit history, commit diff inspection, reverse module dependency tracking).
 
 ---
 
 ## Quick Start
 
 ```bash
-# 1. Bring up Qdrant
+# 1. Bring up Qdrant vector database
 docker compose up -d qdrant
 
-# 2. Ingest the corpus (first run ~24 min, subsequent runs ~30s via cache)
+# 2. Ingest the corpus (initial run builds content-hash cache; re-runs take ~30s)
 PYTHONPATH=. uv run python -m src.ingestion.pipeline
 
-# 3. Start the API
+# 3. Start the API server
 PYTHONPATH=. uv run uvicorn src.api.main:app --reload
 
-# 4. Ask a question
+# 4. Ask a standard code question (Pure RAG)
 curl -X POST http://localhost:8000/ask \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: dev-key-change-me" \
   -d '{"question": "Where is user authentication implemented?"}'
+
+# 5. Query through the Agentic Layer (LangGraph Router + Tools)
+curl -X POST http://localhost:8000/agent/ask \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: dev-key-change-me" \
+  -d '{"question": "Which files changed in commit 6e19f61?"}'
+
+# 6. Query module dependencies
+curl -X POST http://localhost:8000/agent/ask \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: dev-key-change-me" \
+  -d '{"question": "Which files depend on redis?"}'
 ```
 
 ---
@@ -37,40 +60,40 @@ Evaluated on **20 golden test cases** in [`evals/dataset.json`](evals/dataset.js
 | V2 — Weighted RRF | Dense (0.7) + BM25 (0.3) | 75.0% | 80.0% | 0.470 | 44ms |
 | **V2 Final** ✅ | Weighted RRF + semantic prefixes | **85.0%** | **95.0%** | **0.588** | **45ms** |
 
-> Run evals yourself: `PYTHONPATH=. uv run python evals/run_eval.py`
-
-### What drove V2 improvements
-
-| Change | Impact |
-|--------|--------|
-| BM25 + dense vector fusion (Weighted RRF 70/30) | +5% Recall@5 for exact keyword queries |
-| Semantic prefix headers on YAML/SQL/env files | +10% Recall@5 — config files now discoverable by natural language |
-| Dotfile ingestion (`.env.example`) | Fixed silent corpus gap |
-| Content-hash embedding cache | Re-ingestion: 24 min → ~30 seconds |
-
-### Remaining misses (3/20)
-
-| Query | Expected Source | Status | Reason |
-|-------|----------------|--------|--------|
-| q007 — Redis dependencies | `compose.yml`, `ARCHITECTURE.md` | ⚠️ Rank 8 | TypeScript Redis usage files rank higher semantically |
-| q017 — auth integration tests | `auth-helpers.test.ts` | ⚠️ Rank 8 | Query too abstract for file content |
-| q018 — object storage | `compose.yml`, `ARCHITECTURE.md` | ❌ Missed | "object storage" / "MinIO" semantic gap still large |
+> Run benchmark: `PYTHONPATH=. uv run python evals/run_eval.py`
 
 ---
 
-## Architecture
+## Agentic Architecture (LangGraph)
 
 ```
-corpus/ (Campus Connect ~94k LOC)
-    ↓ CodeAwareChunker (TS/MD/Prisma/SQL/YAML aware)
-    ↓ Semantic prefix enrichment (config files)
-    ↓ BGE-small-en-v1.5 embeddings → Qdrant
-                        ↓
-Query → Dense retrieval + BM25 lexical → Weighted RRF fusion
-                        ↓
-              Gemini 1.5 Flash generator
-                        ↓
-         Grounded answer + [file#Lstart-Lend] citations
+                       ┌─────────────────┐
+                       │   User Query    │
+                       └────────┬────────┘
+                                │
+                                ▼
+                       ┌─────────────────┐
+                       │   Router Node   │ (Fast Regex + LLM Fallback)
+                       └────────┬────────┘
+                                │
+        ┌───────────────────────┼───────────────────────┬───────────────────────┐
+        ▼                       ▼                       ▼                       ▼
+┌───────────────┐       ┌───────────────┐       ┌───────────────┐       ┌───────────────┐
+│  direct_rag   │       │  git_history  │       │  git_commit   │       │file_dependents│
+│ (Hybrid RRF)  │       │(git log tool) │       │(git show tool)│       │(import scanner│
+└───────┬───────┘       └───────┬───────┘       └───────┬───────┘       └───────┬───────┘
+        │                       │                       │                       │
+        └───────────────────────┴───────────┬───────────┴───────────────────────┘
+                                            │
+                                            ▼
+                                ┌───────────────────────┐
+                                │   Synthesizer Node    │ (Grounded Citations)
+                                └───────────┬───────────┘
+                                            │
+                                            ▼
+                                ┌───────────────────────┐
+                                │      Final Answer     │
+                                └───────────────────────┘
 ```
 
 ---
@@ -79,16 +102,20 @@ Query → Dense retrieval + BM25 lexical → Weighted RRF fusion
 
 ```
 src/
-  api/          FastAPI server (POST /ask, GET /health)
-  ingestion/    Chunker + pipeline (with embedding cache)
-  retrieval/    Hybrid retriever (BM25 + dense + RRF)
+  agent/        LangGraph state machine, query router, non-RAG tools
+  api/          FastAPI server (POST /ask, POST /agent/ask, POST /ingest, GET /health)
+  ingestion/    Chunker with semantic prefixes + embedding cache pipeline
+  retrieval/    Hybrid retriever (BM25 + dense + weighted RRF)
   generation/   Gemini-powered grounded answer generator
+  observability/Langfuse tracing wrapper with spans
   config.py     Pydantic settings
 evals/
   dataset.json  20 golden test cases
-  run_eval.py   Recall@5, Recall@10, MRR benchmark
-docs/decisions/ 12 Architecture Decision Records (ADRs)
-tests/          9 unit + integration tests
+  run_eval.py   Recall@5, Recall@10, MRR benchmark suite
+docs/
+  decisions/    15 Architectural Decision Records (ADRs)
+  postmortems/  Documented failure investigation case studies
+tests/          Unit and integration test suites
 ```
 
 ---
@@ -96,15 +123,27 @@ tests/          9 unit + integration tests
 ## Running Tests
 
 ```bash
-uv run pytest
+uv run pytest -v
 ```
 
 ---
 
-## ADRs
+## Architectural Decision Records (ADRs)
 
 Key architectural decisions are documented in [`docs/decisions/`](docs/decisions/):
 
+- [0001 — Target Corpus Selection](docs/decisions/0001-target-corpus.md)
+- [0002 — Zero-Cost Embedding & Vector DB](docs/decisions/0002-zero-cost-embedding-and-vector-db.md)
+- [0003 — LLM Provider: Google Gemini](docs/decisions/0003-llm-provider-gemini.md)
+- [0004 — Python Toolchain with uv](docs/decisions/0004-python-toolchain-uv.md)
 - [0005 — Code-Aware Chunking Strategy](docs/decisions/0005-code-aware-chunking-strategy.md)
+- [0006 — GPU Acceleration for Embeddings](docs/decisions/0006-gpu-acceleration-for-embeddings.md)
+- [0007 — Grounded Retrieval and Citations](docs/decisions/0007-grounded-retrieval-and-citations.md)
+- [0008 — FastAPI Service Interface](docs/decisions/0008-fastapi-service-interface.md)
+- [0009 — Docker Containerization](docs/decisions/0009-docker-containerization.md)
 - [0010 — Evaluation Dataset and Benchmark](docs/decisions/0010-evaluation-dataset-and-benchmark.md)
-- [0012 — V2 Hybrid Retrieval and Semantic Prefixing](docs/decisions/0012-v2-hybrid-retrieval-and-semantic-prefixing.md)
+- [0011 — Automated Testing Strategy](docs/decisions/0011-automated-testing-strategy.md)
+- [0012 — V2 Hybrid Retrieval & Semantic Prefixing](docs/decisions/0012-v2-hybrid-retrieval-and-semantic-prefixing.md)
+- [0013 — V3 Production Hardening](docs/decisions/0013-v3-production-hardening.md)
+- [0014 — V4 Observability with Langfuse Tracing](docs/decisions/0014-v4-observability-langfuse-tracing.md)
+- [0015 — V5 Agentic Router with LangGraph](docs/decisions/0015-v5-agentic-router-langgraph.md)
