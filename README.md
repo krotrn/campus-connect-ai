@@ -68,34 +68,26 @@ Evaluated on **20 golden test cases** in [`evals/dataset.json`](evals/dataset.js
 
 ## Agentic Architecture (LangGraph)
 
-```
-                       ┌─────────────────┐
-                       │   User Query    │
-                       └────────┬────────┘
-                                │
-                                ▼
-                       ┌─────────────────┐
-                       │   Router Node   │ (Fast Regex + LLM Fallback)
-                       └────────┬────────┘
-                                │
-        ┌───────────────────────┼───────────────────────┬───────────────────────┐
-        ▼                       ▼                       ▼                       ▼
-┌───────────────┐       ┌───────────────┐       ┌───────────────┐       ┌───────────────┐
-│  direct_rag   │       │  git_history  │       │  git_commit   │       │file_dependents│
-│ (Hybrid RRF)  │       │(git log tool) │       │(git show tool)│       │(import scanner│
-└───────┬───────┘       └───────┬───────┘       └───────┬───────┘       └───────┬───────┘
-        │                       │                       │                       │
-        └───────────────────────┴───────────┬───────────┴───────────────────────┘
-                                            │
-                                            ▼
-                                ┌───────────────────────┐
-                                │   Synthesizer Node    │ (Grounded Citations)
-                                └───────────┬───────────┘
-                                            │
-                                            ▼
-                                ┌───────────────────────┐
-                                │      Final Answer     │
-                                └───────────────────────┘
+```mermaid
+flowchart TD
+    UserQuery(["User Query"]) --> RouterNode["Router Node<br/><i>(Fast Regex + LLM Fallback)</i>"]
+    
+    RouterNode -->|direct_rag| DirectRAG["direct_rag<br/><b>(Hybrid RRF 70/30)</b>"]
+    RouterNode -->|git_history| GitHistory["git_history<br/><b>(git log tool)</b>"]
+    RouterNode -->|git_commit| GitCommit["git_commit<br/><b>(git show tool)</b>"]
+    RouterNode -->|file_dependents| FileDependents["file_dependents<br/><b>(import scanner)</b>"]
+    
+    DirectRAG --> SynthesizerNode["Synthesizer Node<br/><i>(Grounded Citations)</i>"]
+    GitHistory --> SynthesizerNode
+    GitCommit --> SynthesizerNode
+    FileDependents --> SynthesizerNode
+    
+    SynthesizerNode --> FinalAnswer(["Final Answer"])
+
+    style UserQuery fill:#f0f7ff,stroke:#2563eb,stroke-width:2px
+    style RouterNode fill:#fdf4ff,stroke:#c026d3,stroke-width:2px
+    style SynthesizerNode fill:#fdf4ff,stroke:#c026d3,stroke-width:2px
+    style FinalAnswer fill:#f0fdf4,stroke:#16a34a,stroke-width:2px
 ```
 
 ---
@@ -117,9 +109,10 @@ evals/
   dataset.json  20 golden test cases
   run_eval.py   Recall@5, Recall@10, MRR benchmark suite
 docs/
-  decisions/    17 Architectural Decision Records (ADRs)
-  postmortems/  Documented failure investigation case studies
-tests/          Unit and integration test suites
+  decisions/        17 Architectural Decision Records (ADRs)
+  developer-guide/  Complete Onboarding & Codebase Mastery Curriculum
+  postmortems/      Documented failure investigation case studies
+tests/              Unit and integration test suites
 ```
 
 ---

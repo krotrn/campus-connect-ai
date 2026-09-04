@@ -25,12 +25,35 @@ During testing and free-tier operation, several failure modes were observed:
 
 We established an explicit domain exception hierarchy rooted in `AEIAError`:
 
-```
-AEIAError (Base domain error: status_code, error_code, message)
-├── LLMQuotaExceededError (HTTP 429, error_code="LLM_QUOTA_EXHAUSTED", retry_after)
-├── LLMServiceUnavailableError (HTTP 503, error_code="LLM_UNAVAILABLE")
-├── VectorDBUnavailableError (HTTP 503, error_code="VECTOR_DB_UNAVAILABLE")
-└── CorpusUnavailableError (HTTP 500, error_code="CORPUS_UNAVAILABLE")
+```mermaid
+classDiagram
+    class AEIAError {
+        +int status_code
+        +str error_code
+        +str message
+    }
+    class LLMQuotaExceededError {
+        +int status_code = 429
+        +str error_code = "LLM_QUOTA_EXHAUSTED"
+        +Optional[int] retry_after
+    }
+    class LLMServiceUnavailableError {
+        +int status_code = 503
+        +str error_code = "LLM_UNAVAILABLE"
+    }
+    class VectorDBUnavailableError {
+        +int status_code = 503
+        +str error_code = "VECTOR_DB_UNAVAILABLE"
+    }
+    class CorpusUnavailableError {
+        +int status_code = 500
+        +str error_code = "CORPUS_UNAVAILABLE"
+    }
+
+    AEIAError <|-- LLMQuotaExceededError
+    AEIAError <|-- LLMServiceUnavailableError
+    AEIAError <|-- VectorDBUnavailableError
+    AEIAError <|-- CorpusUnavailableError
 ```
 
 ### 2. Dual-Layer LLM Handling: Graceful Degradation & Quota Propagation

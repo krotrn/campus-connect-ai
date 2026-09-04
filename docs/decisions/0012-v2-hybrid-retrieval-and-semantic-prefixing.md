@@ -41,6 +41,27 @@ The common pattern: **embedding models understand TypeScript and Markdown prose 
 
 Add a BM25 lexical search index (`rank_bm25.BM25Okapi`) alongside the existing dense vector search. The two ranked lists are merged using **Reciprocal Rank Fusion (RRF)** with asymmetric weights:
 
+```mermaid
+flowchart TD
+    UserQuery(["User Query"]) --> EmbedBranch["FastEmbed<br/><i>(BAAI/bge-small-en-v1.5)</i>"]
+    UserQuery --> LexBranch["Code-Aware Tokenizer<br/><i>(camelCase + symbol splitter)</i>"]
+
+    EmbedBranch --> DenseSearch["Dense Vector Search<br/><b>(Qdrant Cosine Similarity)</b>"]
+    LexBranch --> BM25Search["Sparse Lexical Search<br/><b>(BM25Okapi Index)</b>"]
+
+    DenseSearch --> DenseRanks["Ranked List (Dense)<br/>rank_dense = 1, 2, ..."]
+    BM25Search --> BM25Ranks["Ranked List (BM25)<br/>rank_bm25 = 1, 2, ..."]
+
+    DenseRanks --> Fusion["Weighted Reciprocal Rank Fusion (RRF)<br/><b>Score(d) = 0.7 / (60 + rank_dense) + 0.3 / (60 + rank_bm25)</b>"]
+    BM25Ranks --> Fusion
+
+    Fusion --> TopK(["Top-K Fused Candidates<br/>(k = 5)"])
+
+    style UserQuery fill:#f0f7ff,stroke:#2563eb,stroke-width:2px
+    style Fusion fill:#fdf4ff,stroke:#c026d3,stroke-width:2px
+    style TopK fill:#f0fdf4,stroke:#16a34a,stroke-width:2px
+```
+
 ```
 Score(doc) = 0.7 / (60 + rank_dense) + 0.3 / (60 + rank_bm25)
 ```

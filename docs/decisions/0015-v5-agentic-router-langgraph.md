@@ -35,22 +35,21 @@ We implement the agentic reasoning layer using **LangGraph** (`langgraph.graph.S
 - `steps_taken`: Audit trail of transitions for observability.
 
 #### Graph Topology:
-```
-                      START
-                        │
-                        ▼
-                   [ router ]
-                        │ (conditional edge)
-       ┌────────────────┼────────────────┬────────────────┐
-       ▼                ▼                ▼                ▼
- [ direct_rag ]  [ git_history ]  [ git_commit ]  [ file_dependents ]
-       │                │                │                │
-       └────────────────┼────────────────┴────────────────┘
-                        ▼
-                 [ synthesizer ]
-                        │
-                        ▼
-                       END
+```mermaid
+flowchart TD
+    START([START]) --> Router[router]
+    
+    Router -->|conditional edge| DirectRAG[direct_rag]
+    Router -->|conditional edge| GitHistory[git_history]
+    Router -->|conditional edge| GitCommit[git_commit]
+    Router -->|conditional edge| FileDependents[file_dependents]
+    
+    DirectRAG --> Synthesizer[synthesizer]
+    GitHistory --> Synthesizer
+    GitCommit --> Synthesizer
+    FileDependents --> Synthesizer
+    
+    Synthesizer --> END([END])
 ```
 
 ### 2. Dual-Stage Router Node (FR5.1)

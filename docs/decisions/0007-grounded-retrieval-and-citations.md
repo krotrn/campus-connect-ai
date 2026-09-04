@@ -27,6 +27,29 @@ To satisfy this, the generation subsystem must:
      - `answer`: Natural language explanation answering the question with inline citations.
      - `sources`: List of distinct source objects `{ "file_path": str, "start_line": int, "end_line": int }`.
 
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Developer / Client
+    participant API as FastAPI (POST /ask)
+    participant Retriever as Hybrid Retriever
+    participant Qdrant as Qdrant Vector DB
+    participant Generator as Grounded Generator
+    participant Gemini as Google Gemini 2.0 Flash
+
+    User->>API: POST /ask {"question": "..."}
+    API->>Retriever: retrieve(query, top_k=5)
+    Retriever->>Qdrant: Hybrid Search (Dense + BM25)
+    Qdrant-->>Retriever: [Chunk 1, Chunk 2, ... Chunk 5]
+    Retriever-->>API: List[CodeChunk]
+    API->>Generator: generate_answer(query, chunks)
+    Note over Generator: Formats context block with tags:<br/>[file_path#Lstart-Lend]
+    Generator->>Gemini: Strict Grounding Prompt + Context
+    Gemini-->>Generator: Structured JSON Answer + Inline Citations
+    Generator-->>API: AnswerResponse {answer, sources}
+    API-->>User: 200 OK {answer, sources, latency_ms}
+```
+
 ## Consequences
 - **Positive**: High faithfulness; all assertions are backed by concrete file paths and line ranges.
 - **Positive**: Zero hallucinations on out-of-scope questions (model admits absence of evidence).

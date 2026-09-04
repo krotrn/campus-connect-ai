@@ -9,6 +9,19 @@ During V2 evaluation, 4 out of 20 golden test queries consistently failed to ret
 
 ## Timeline
 
+```mermaid
+timeline
+    title V2 Retrieval Investigation & Resolution Timeline
+    Day 1 (2026-09-03) : 14:00 V1 baseline established (Recall@5 70.0%, MRR 0.638)
+                       : 15:00 Equal-weight RRF tested (MRR dropped from 0.638 to 0.464)
+                       : 15:30 Cross-encoder reranking rejected (33x latency spike, metrics degraded)
+                       : 16:00 Weighted RRF 70/30 applied (Recall recovered to 80.0%)
+                       : 16:30 Root cause analysis of 4 persistent misses (.env, redis, sql, minio)
+    Day 2 (2026-09-04) : 10:00 Implemented semantic prefix enrichment & dotfile allowlist
+                       : 11:30 Re-ingested corpus with content-hash cache
+                       : 12:00 Benchmark verified: Recall@5 jumped to 85.0%, Recall@10 to 95.0%
+```
+
 ### Day 1 (2026-09-03): V1 → V2 Migration
 
 **14:00** — V1 baseline established: Recall@5 70.0%, MRR 0.638
@@ -53,10 +66,16 @@ import Redis from "ioredis";  // ← BGE-small understands this as "Redis-relate
 **Root cause**: YAML syntax has no semantic signal. BGE-small's training data contains very few YAML infrastructure files, so the embedding space places YAML blocks far from natural-language Redis queries.
 
 **Embedding space visualization**:
-```
-Query: "What depends on Redis?"
-  → near: TypeScript imports (redis.ts, redis-connection.ts)
-  → far:  YAML service blocks (compose.yml redis:)
+```mermaid
+graph LR
+    Query["Query: 'What depends on Redis?'"]
+    
+    Query -->|High Semantic Proximity| TS["TypeScript Imports<br/><code>redis.ts</code>, <code>redis-connection.ts</code>"]
+    Query -.->|Low Semantic Proximity / Opaque| YAML["YAML Service Blocks<br/><code>compose.yml (redis: ...)</code>"]
+
+    style Query fill:#eef2ff,stroke:#6366f1,stroke-width:2px
+    style TS fill:#f0fdf4,stroke:#22c55e,stroke-width:1px
+    style YAML fill:#fef2f2,stroke:#ef4444,stroke-width:1px
 ```
 
 #### q008: SQL Migration — Semantic Gap

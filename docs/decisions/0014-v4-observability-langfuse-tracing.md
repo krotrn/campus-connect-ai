@@ -24,17 +24,14 @@ Integrate the Langfuse Python SDK to capture structured traces for every `/ask` 
 
 **Architecture**: A dedicated `src/observability/` module wraps the RAG pipeline with Langfuse spans:
 
-```
-Trace: rag-ask
-├── Span: retrieval
-│   ├── input: query, top_k
-│   ├── output: num_chunks, top_files, top_scores
-│   └── metadata: latency_ms
-└── Generation: gemini-generate
-    ├── input: question, context_chunks count
-    ├── model: gemini-2.5-flash-lite
-    ├── output: answer (trimmed)
-    └── metadata: latency_ms, answer_length
+```mermaid
+graph TD
+    Trace["Trace: rag-ask"] --> SpanRetrieval["Span: retrieval<br/>• input: query, top_k<br/>• output: num_chunks, top_files, top_scores<br/>• metadata: latency_ms"]
+    Trace --> SpanGen["Generation: gemini-generate<br/>• input: question, context_chunks count<br/>• model: gemini-2.5-flash-lite<br/>• output: answer (trimmed)<br/>• metadata: latency_ms, answer_length"]
+
+    style Trace fill:#eef2ff,stroke:#6366f1,stroke-width:2px
+    style SpanRetrieval fill:#f0fdf4,stroke:#22c55e,stroke-width:1px
+    style SpanGen fill:#fef3c7,stroke:#f59e0b,stroke-width:1px
 ```
 
 **Graceful degradation**: If `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` are not set in `.env`, all tracing is silently skipped. The `traced_ask()` function falls back to direct execution with zero overhead. This means:

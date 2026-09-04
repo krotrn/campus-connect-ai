@@ -44,6 +44,51 @@ To prevent unauthorized or dangerous execution:
 1. **Stdio Transport**: Executed locally via `python -m src.mcp.server` for IDE plugins (Claude Desktop, Cursor).
 2. **Streamable HTTP Transport (2026-07-28)**: Mounted directly into FastAPI (`POST /mcp/`) via `mcp_server.streamable_http_app()`, enabling horizontal scalability, stateless load balancing, and cloud deployment.
 
+```mermaid
+flowchart TD
+    subgraph Clients["MCP Clients"]
+        ClaudeDesktop["Claude Desktop / Cursor<br/><i>(Local IDE)</i>"]
+        AgentGateway["External Agent / Cloud Gateway<br/><i>(Remote Runtime)</i>"]
+    end
+
+    subgraph Transports["Transport Layer (2026-07-28 Stateless Spec)"]
+        Stdio["Stdio Transport<br/><code>python -m src.mcp.server</code>"]
+        HTTP["Streamable HTTP Transport<br/><code>POST /mcp/</code> (FastAPI Mount)"]
+    end
+
+    subgraph SecurityBoundary["Security & Permission Perimeter"]
+        Allowlist{"ALLOWED_MCP_TOOLS<br/>Allowlist Validation"}
+        Denied["PermissionError<br/>(403 Forbidden)"]
+    end
+
+    subgraph MCPTools["Granular MCP Tools"]
+        T1["search_campus_connect<br/><b>(Hybrid RAG)</b>"]
+        T2["explain_codebase_query<br/><b>(Grounded Synthesis)</b>"]
+        T3["get_commit_history<br/><b>(Git Log)</b>"]
+        T4["get_commit_diff<br/><b>(Git Diff)</b>"]
+        T5["find_module_dependents<br/><b>(Import Scanner)</b>"]
+    end
+
+    subgraph TargetCorpus["Target Systems"]
+        VectorDB[("Qdrant Vector DB<br/>(campus_connect collection)")]
+        CorpusFS[("./corpus/campus-connect<br/>(Git & Filesystem)")]
+    end
+
+    ClaudeDesktop --> Stdio --> Allowlist
+    AgentGateway --> HTTP --> Allowlist
+
+    Allowlist -->|Valid Tool| T1 & T2 & T3 & T4 & T5
+    Allowlist -.->|Unknown / Unlisted| Denied
+
+    T1 & T2 --> VectorDB
+    T3 & T4 & T5 --> CorpusFS
+
+    style Clients fill:#f0f7ff,stroke:#2563eb,stroke-width:2px
+    style SecurityBoundary fill:#fef2f2,stroke:#ef4444,stroke-width:2px
+    style MCPTools fill:#fdf4ff,stroke:#c026d3,stroke-width:2px
+    style TargetCorpus fill:#f0fdf4,stroke:#16a34a,stroke-width:2px
+```
+
 ### 5. Client Configuration Guide
 
 #### Claude Desktop (`claude_desktop_config.json`)

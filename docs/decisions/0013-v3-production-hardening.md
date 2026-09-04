@@ -47,9 +47,14 @@ A `.github/workflows/ci.yml` that runs on every push to `main` and every pull re
 Add `POST /ingest` and `GET /ingest/status` endpoints. Ingestion runs in a background thread via `asyncio.run_in_executor()`, never blocking HTTP request handling.
 
 **State machine**:
-```
-IDLE → RUNNING → COMPLETED
-                → FAILED (with error message)
+```mermaid
+stateDiagram-v2
+    [*] --> IDLE
+    IDLE --> RUNNING: POST /ingest
+    RUNNING --> COMPLETED: Ingestion succeeded
+    RUNNING --> FAILED: Exception / error
+    COMPLETED --> IDLE: New ingestion run
+    FAILED --> IDLE: Reset / retry
 ```
 
 **Design choice — in-process thread vs. external queue (Celery/BullMQ)**: An in-process thread executor is sufficient for V3. The ingestion pipeline is a single long-running batch job (not a stream of tasks). Adding Celery would require a Redis broker dependency and a separate worker process — unnecessary complexity for a single-user system. Can be upgraded in V5 if multiple concurrent ingestion jobs are needed.
