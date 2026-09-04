@@ -11,5 +11,9 @@ class Settings(BaseSettings):
     embedding_dim:int = 384
     api_key:str = "dev-key-change-me"
     rate_limit:str = "20/minute"
+    # Langfuse observability (leave empty to disable)
+    langfuse_public_key:str = ""
+    langfuse_secret_key:str = ""
+    langfuse_host:str = "https://cloud.langfuse.com"
 
 settings = Settings()

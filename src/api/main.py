@@ -12,6 +12,7 @@ from slowapi.util import get_remote_address
 from src.api.tasks import IngestionStatus, get_status, trigger_ingestion
 from src.config import settings
 from src.generation.generator import AnswerGenerator, SourceCitation
+from src.observability import flush as langfuse_flush, init_langfuse, traced_ask
 from src.retrieval.retriever import Retriever
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -30,7 +31,9 @@ async def lifespan(app: FastAPI):
     print("🚀 Initializing AEIA Retriever and Generator...")
     services["retriever"] = Retriever()
     services["generator"] = AnswerGenerator()
+    init_langfuse()
     yield
+    langfuse_flush()
     services.clear()
 
 
@@ -161,22 +164,14 @@ async def ask_question(request: Request, body: AskRequest):
             detail="RAG pipeline is initializing",
         )
 
-    start_time = time.time()
-
     try:
-        # 1. Retrieve top-K grounded chunks
-        chunks = retriever.retrieve(body.question, top_k=body.top_k)
-
-        # 2. Generate grounded answer
-        result = generator.generate(body.question, chunks)
-
-        latency_ms = round((time.time() - start_time) * 1000, 2)
+        result = traced_ask(body.question, body.top_k, retriever, generator)
 
         return AskResponse(
             question=body.question,
-            answer=result.answer,
-            sources=result.sources,
-            latency_ms=latency_ms,
+            answer=result["answer"],
+            sources=result["sources"],
+            latency_ms=result["latency_ms"],
         )
     except Exception as e:
         raise HTTPException(

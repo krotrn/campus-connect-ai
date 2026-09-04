@@ -10,6 +10,7 @@ dependencies = [
     "flashrank>=0.2.10",
     "google-genai>=2.22.0",
     "langchain-text-splitters>=1.1.2",
+    "langfuse>=4.15.1",
     "onnxruntime>=1.29.0",
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
