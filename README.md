@@ -25,6 +25,7 @@
   - **Prisma**: Structural block parsing of complete `model` and `enum` declarations with relational integrity.
   - **YAML / Compose**: Slices Docker Compose and CI workflows by top-level service/job blocks, preserving indentation.
   - **Markdown & SQL**: Preserves heading hierarchy breadcrumbs and complete DDL statements.
+- **RAG Triad Generation Evaluation**: Automated LLM-as-a-Judge benchmark (`evals/generation_eval.py`) evaluating **Faithfulness** (hallucination check), **Answer Relevance**, and **Context Precision** across 20 golden test queries.
 
 ---
 
@@ -163,3 +164,4 @@ Key architectural decisions are documented in [`docs/decisions/`](docs/decisions
 - [0021 — GitHub Push Webhook Automation](docs/decisions/0021-github-push-webhook-automation.md)
 - [0022 — Interactive Web UI Playground](docs/decisions/0022-interactive-web-playground-ui.md)
 - [0023 — Multi-Format Syntax-Aware Chunking](docs/decisions/0023-multi-format-syntax-aware-chunking.md)
+- [0024 — Automated RAG Triad Generation Evaluation](docs/decisions/0024-rag-triad-generation-evaluation.md)

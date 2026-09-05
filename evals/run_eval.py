@@ -90,5 +90,17 @@ def evaluate_retrieval(dataset_path: Path = Path("evals/dataset.json")):
 
 
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Run AEIA Evaluation Suite")
+    parser.add_argument("--generation", action="store_true", help="Also run RAG Triad generation evaluation")
+    parser.add_argument("--limit", type=int, default=None, help="Limit number of queries evaluated")
+    args = parser.parse_args()
+
     evaluate_retrieval()
+
+    if args.generation:
+        from evals.generation_eval import run_generation_evaluation
+
+        run_generation_evaluation(limit=args.limit)
 

@@ -338,8 +338,16 @@ mindmap
 ### 4.2 `evals/run_eval.py`
 - **Relative Path**: [`../../evals/run_eval.py`](../../evals/run_eval.py)
 - **Role**: Benchmark runner executing queries against the live retriever.
+- **Role**: Benchmark runner executing queries against the live retriever. Supports `--generation` flag.
 - **Anatomy**: Computes Recall@5, Recall@10, Mean Reciprocal Rank (MRR), average search latency, and prints a formatted per-category breakdown table.
 - **Verification**: `PYTHONPATH=. uv run python evals/run_eval.py`
+
+### 4.3 `evals/generation_eval.py`
+- **Relative Path**: [`../../evals/generation_eval.py`](../../evals/generation_eval.py)
+- **Role**: Automated RAG Triad generation evaluation suite using Google Gemini as an LLM-as-a-Judge.
+- **Technologies Needed**: `google-genai`, RAG Triad framework, JSON response schemas.
+- **Anatomy**: Evaluates Faithfulness (groundedness / hallucination rate), Answer Relevance, and Context Precision across the 20 golden queries in `dataset.json`. Generates structured benchmark report at `evals/generation_benchmark.json`.
+- **Verification**: `uv run python evals/generation_eval.py --limit 2`
 
 ---
 
@@ -361,6 +369,7 @@ All test suites use `pytest` and can be run simultaneously via `uv run pytest -v
 | [`../../tests/test_incremental_ingestion.py`](../../tests/test_incremental_ingestion.py) | Live Sync & Webhook | Tests git sync, deterministic point IDs, HMAC-SHA256 signature verification, branch filtering, and BM25 thread safety. |
 | [`../../tests/test_ui.py`](../../tests/test_ui.py) | Web Playground | Tests `GET /ui` HTML delivery, browser redirect negotiation on `GET /`, and API client JSON responses. |
 | [`../../tests/test_syntax_chunkers.py`](../../tests/test_syntax_chunkers.py) | Syntax Chunkers | Tests Tree-Sitter AST parser (TS/TSX), Prisma blocks, YAML compose services, Markdown sections, and SQL DDL. |
+| [`../../tests/test_generation_eval.py`](../../tests/test_generation_eval.py) | RAG Triad Evals | Tests LLM judge scoring, faithful vs hallucinated claim detection, and benchmark summary aggregation. |
 
 ---
 
@@ -391,6 +400,7 @@ Every major technical choice is documented as an ADR:
 - [`0021-github-push-webhook-automation.md`](../decisions/0021-github-push-webhook-automation.md): GitHub Push Webhook Automation with HMAC-SHA256 Authentication.
 - [`0022-interactive-web-playground-ui.md`](../decisions/0022-interactive-web-playground-ui.md): Interactive Web UI Playground & Visual Citation Inspector.
 - [`0023-multi-format-syntax-aware-chunking.md`](../decisions/0023-multi-format-syntax-aware-chunking.md): Multi-Format Syntax-Aware Chunking (Tree-Sitter AST & Structural Block Parsers).
+- [`0024-rag-triad-generation-evaluation.md`](../decisions/0024-rag-triad-generation-evaluation.md): Automated RAG Triad Generation Evaluation Suite.
 
 ---
 

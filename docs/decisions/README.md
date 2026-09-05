@@ -27,3 +27,4 @@ This directory documents the key architectural and technical decisions made for 
 | [0021](0021-github-push-webhook-automation.md) | GitHub Push Webhook Automation with HMAC-SHA256 Authentication | Accepted | 2026-09-06 |
 | [0022](0022-interactive-web-playground-ui.md) | Interactive Web UI Playground & Visual Citation Inspector | Accepted | 2026-09-06 |
 | [0023](0023-multi-format-syntax-aware-chunking.md) | Multi-Format Syntax-Aware Chunking (Tree-Sitter AST & Structural Block Parsers) | Accepted | 2026-09-06 |
+| [0024](0024-rag-triad-generation-evaluation.md) | Automated RAG Triad Generation Evaluation Suite | Accepted | 2026-09-06 |

@@ -1,0 +1,48 @@
+{
+  "timestamp": "2026-09-05T21:13:11Z",
+  "total_evaluated": 2,
+  "overall_metrics": {
+    "faithfulness": 1.0,
+    "hallucination_rate": 0.0,
+    "answer_relevance": 1.0,
+    "context_precision": 1.0
+  },
+  "category_breakdown": {
+    "code_location": {
+      "faithfulness": 100.0,
+      "relevance": 100.0,
+      "precision": 100.0
+    },
+    "config_schema_lookup": {
+      "faithfulness": 100.0,
+      "relevance": 100.0,
+      "precision": 100.0
+    }
+  },
+  "results": [
+    {
+      "id": "q001",
+      "category": "code_location",
+      "question": "Where is user authentication implemented?",
+      "faithfulness": 1.0,
+      "answer_relevance": 1.0,
+      "context_precision": 1.0,
+      "unsupported_claims_count": 0,
+      "retrieval_latency_ms": 36.43083572387695,
+      "generation_latency_ms": 2695.5387592315674,
+      "route": "direct_rag"
+    },
+    {
+      "id": "q002",
+      "category": "config_schema_lookup",
+      "question": "How is the database schema defined in this project?",
+      "faithfulness": 1.0,
+      "answer_relevance": 1.0,
+      "context_precision": 1.0,
+      "unsupported_claims_count": 0,
+      "retrieval_latency_ms": 43.984174728393555,
+      "generation_latency_ms": 1867.0752048492432,
+      "route": "direct_rag"
+    }
+  ]
+}
