@@ -14,6 +14,11 @@
 - **Agentic Layer (V5)**: Explicit **LangGraph** state machine that routes queries between direct hybrid RAG and non-RAG tools (git commit history, commit diff inspection, reverse module dependency tracking).
 - **Model Context Protocol (V6)**: Exposes codebase intelligence as an official **MCP Server** (2026-07-28 stateless HTTP spec) with granular tools (`search_campus_connect`, `explain_codebase_query`, `get_commit_history`, etc.).
 - **Graceful Error Resilience & Quota Degradation (V7)**: Centralized exception handling across domain and upstream Gemini API errors (`429 RESOURCE_EXHAUSTED`, `503 SERVICE_UNAVAILABLE`), providing grounded code context fallback even during LLM quota exhaustion.
+- **Continuous Knowledge Synchronization**:
+  - **Git Pull & Commit Diffing**: Automatically pulls `main` and tracks changed files (`src/ingestion/git_sync.py`).
+  - **Incremental Delta-Only Ingestion**: Re-indexes only touched files using deterministic chunk point IDs, eliminating vector DB downtime.
+  - **GitHub Webhook (`POST /webhook/github`)**: Cryptographically verified HMAC-SHA256 push listener triggers instant background sync.
+  - **Thread-Safe BM25 Hot-Reload**: Build-then-swap pattern ensures concurrent query threads never see incomplete index states during background ingestion.
 
 ---
 
@@ -97,10 +102,10 @@ flowchart TD
 ```
 src/
   agent/        LangGraph state machine, query router, non-RAG tools
-  api/          FastAPI server (POST /ask, POST /agent/ask, POST /ingest, GET /health, /mcp)
+  api/          FastAPI server (POST /ask, POST /agent/ask, POST /ingest, POST /webhook/github, GET /health, /mcp)
   mcp/          Model Context Protocol server (2026-07-28 stateless HTTP spec)
-  ingestion/    Chunker with semantic prefixes + embedding cache pipeline
-  retrieval/    Hybrid retriever (BM25 + dense + weighted RRF)
+  ingestion/    Chunker, git pull syncer, delta-only + full embedding pipelines
+  retrieval/    Hybrid retriever (thread-safe BM25 + dense + weighted RRF)
   generation/   Gemini-powered grounded answer generator
   observability/Langfuse tracing wrapper with spans
   errors.py     Typed domain exception hierarchy
@@ -109,7 +114,7 @@ evals/
   dataset.json  20 golden test cases
   run_eval.py   Recall@5, Recall@10, MRR benchmark suite
 docs/
-  decisions/        17 Architectural Decision Records (ADRs)
+  decisions/        21 Architectural Decision Records (ADRs)
   developer-guide/  Complete Onboarding & Codebase Mastery Curriculum
   postmortems/      Documented failure investigation case studies
 tests/              Unit and integration test suites
@@ -146,3 +151,7 @@ Key architectural decisions are documented in [`docs/decisions/`](docs/decisions
 - [0015 — V5 Agentic Router with LangGraph](docs/decisions/0015-v5-agentic-router-langgraph.md)
 - [0016 — V6 Model Context Protocol Server](docs/decisions/0016-v6-model-context-protocol-server.md)
 - [0017 — Error Handling & Upstream Degradation](docs/decisions/0017-error-handling-and-upstream-degradation.md)
+- [0018 — Thread-Safe BM25 In-Memory Index Hot-Reload](docs/decisions/0018-bm25-thread-safe-hot-reload.md)
+- [0019 — Automated Git Synchronization & Diff Tracking](docs/decisions/0019-git-corpus-sync-and-diff-tracking.md)
+- [0020 — Incremental Delta-Only Ingestion](docs/decisions/0020-incremental-delta-only-ingestion.md)
+- [0021 — GitHub Push Webhook Automation](docs/decisions/0021-github-push-webhook-automation.md)

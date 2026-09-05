@@ -7,7 +7,14 @@ from typing import Dict, List, Tuple
 import numpy as np
 from fastembed import TextEmbedding
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, PointStruct, VectorParams
+from qdrant_client.models import (
+    Distance,
+    FieldCondition,
+    Filter,
+    MatchValue,
+    PointStruct,
+    VectorParams,
+)
 
 from src.config import settings
 from src.ingestion.chunker import CodeAwareChunker, CodeChunk
@@ -93,6 +100,17 @@ class EmbeddingCache:
         return len(self._cache)
 
 
+def _point_id(file_path: str, chunk_index: int) -> int:
+    """Deterministic Qdrant point ID from (file_path, chunk_index).
+
+    Uses a stable hash so that re-chunking the same logical location
+    produces the same point ID, enabling idempotent upserts.
+    """
+    raw = hashlib.sha256(f"{file_path}::{chunk_index}".encode()).hexdigest()
+    # Qdrant accepts unsigned 64-bit int IDs (0 .. 2^63-1 for signed compat)
+    return int(raw[:15], 16)
+
+
 class IngestionPipeline:
     def __init__(self):
         self.client = QdrantClient(url=settings.qdrant_url)
@@ -107,7 +125,6 @@ class IngestionPipeline:
             self.client.delete_collection(collection_name=settings.collection_name)
             collections.remove(settings.collection_name)
 
-
         if settings.collection_name not in collections:
             print(f"Creating collection '{settings.collection_name}' ({settings.embedding_dim} dim, Cosine)...")
             self.client.create_collection(
@@ -115,7 +132,7 @@ class IngestionPipeline:
                 vectors_config=VectorParams(size=settings.embedding_dim, distance=Distance.COSINE),
             )
 
-    def scan_files(self, base_dir:Path) -> List[Path]:
+    def scan_files(self, base_dir: Path) -> List[Path]:
         files_to_process = []
         for p in base_dir.rglob("*"):
             if p.is_file():
@@ -127,6 +144,18 @@ class IngestionPipeline:
                     continue
                 files_to_process.append(p)
         return files_to_process
+
+    @staticmethod
+    def _is_ingestable(rel_path: str) -> bool:
+        """Check whether a relative path passes extension / ignore filters."""
+        p = Path(rel_path)
+        if any(part in IGNORE_DIRS for part in p.parts):
+            return False
+        if p.name in IGNORE_FILES:
+            return False
+        if p.suffix.lower() not in ALLOWED_EXTENSIONS and p.name not in ALLOWED_FILENAMES:
+            return False
+        return True
 
     def _get_embeddings(self, chunks: List[CodeChunk]) -> List[List[float]]:
         """
@@ -172,6 +201,69 @@ class IngestionPipeline:
 
         return embeddings  # type: ignore
 
+    def _delete_points_for_file(self, rel_path: str) -> int:
+        """Delete all Qdrant points whose ``file_path`` payload matches *rel_path*.
+
+        Returns the number of points deleted.
+        """
+        ids_to_delete: List[int] = []
+        next_offset = None
+        while True:
+            records, next_offset = self.client.scroll(
+                collection_name=settings.collection_name,
+                scroll_filter=Filter(
+                    must=[FieldCondition(key="file_path", match=MatchValue(value=rel_path))]
+                ),
+                limit=256,
+                offset=next_offset,
+                with_payload=False,
+                with_vectors=False,
+            )
+            ids_to_delete.extend(r.id for r in records)
+            if next_offset is None:
+                break
+
+        if ids_to_delete:
+            self.client.delete(
+                collection_name=settings.collection_name,
+                points_selector=ids_to_delete,
+            )
+        return len(ids_to_delete)
+
+    def _upsert_chunks(self, chunks: List[CodeChunk], embeddings: List[List[float]]):
+        """Upsert chunks with deterministic point IDs."""
+        total_batches = (len(chunks) + BATCH_SIZE - 1) // BATCH_SIZE
+        for b_idx in range(total_batches):
+            batch_start = b_idx * BATCH_SIZE
+            batch_end = min(batch_start + BATCH_SIZE, len(chunks))
+            batch_chunks = chunks[batch_start:batch_end]
+            batch_embeddings = embeddings[batch_start:batch_end]
+
+            points = []
+            for chunk, emb in zip(batch_chunks, batch_embeddings):
+                points.append(
+                    PointStruct(
+                        id=_point_id(chunk.file_path, chunk.chunk_index),
+                        vector=emb,
+                        payload={
+                            "content": chunk.content,
+                            "file_path": chunk.file_path,
+                            "start_line": chunk.start_line,
+                            "end_line": chunk.end_line,
+                            "file_type": chunk.file_type,
+                            "chunk_index": chunk.chunk_index,
+                        },
+                    )
+                )
+            self.client.upsert(
+                collection_name=settings.collection_name,
+                points=points,
+            )
+            print(f"   Upserted batch {b_idx + 1}/{total_batches} ({len(points)} points)")
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Full (re)ingestion
+    # ─────────────────────────────────────────────────────────────────────────
 
     def run(self, recreate: bool = False):
         start_time = time.time()
@@ -184,7 +276,7 @@ class IngestionPipeline:
         files = self.scan_files(corpus_path)
         print(f"Found {len(files)} files to ingest from {corpus_path}")
 
-        all_chunks:List[CodeChunk] = []
+        all_chunks: List[CodeChunk] = []
         for file_path in files:
             rel_path = str(file_path.relative_to(corpus_path))
             chunks = self.chunker.chunk_file(file_path, rel_path)
@@ -232,6 +324,65 @@ class IngestionPipeline:
 
         elapsed = time.time() - start_time
         print(f"\nIngestion Complete! Ingested {len(all_chunks)} chunks across {len(files)} files in {elapsed:.2f}s.")
+        return {"files": len(files), "chunks": len(all_chunks)}
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Incremental (delta-only) ingestion
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def run_incremental(self, changed_files: List[str]) -> dict:
+        """Re-index only the files that changed.
+
+        For each file in *changed_files*:
+          1. Delete all existing Qdrant points for that file path.
+          2. If the file still exists on disk, re-chunk and upsert.
+          3. If the file was deleted, just the deletion above is sufficient.
+
+        Returns ``{"files": N, "chunks": M, "deleted_points": D}``.
+        """
+        start_time = time.time()
+        self.init_collection(recreate=False)
+
+        corpus_path = settings.corpus_path
+        if not corpus_path.exists():
+            raise FileNotFoundError(f"Corpus directory not found at {corpus_path}")
+
+        total_deleted = 0
+        all_chunks: List[CodeChunk] = []
+
+        for rel_path in changed_files:
+            if not self._is_ingestable(rel_path):
+                continue
+
+            # 1. Remove stale points for this file
+            deleted = self._delete_points_for_file(rel_path)
+            total_deleted += deleted
+
+            # 2. Re-chunk if the file still exists
+            abs_path = corpus_path / rel_path
+            if abs_path.is_file():
+                chunks = self.chunker.chunk_file(abs_path, rel_path)
+                all_chunks.extend(chunks)
+
+        if all_chunks:
+            print(f"   Re-chunking {len(all_chunks)} chunks from {len(changed_files)} changed files...")
+            embeddings = self._get_embeddings(all_chunks)
+            self._upsert_chunks(all_chunks, embeddings)
+
+        self.cache.save()
+
+        elapsed = time.time() - start_time
+        print(
+            f"\n✅ Incremental ingestion done in {elapsed:.2f}s: "
+            f"{len(changed_files)} files touched, {total_deleted} stale points removed, "
+            f"{len(all_chunks)} chunks upserted."
+        )
+        return {
+            "files": len(changed_files),
+            "chunks": len(all_chunks),
+            "deleted_points": total_deleted,
+        }
+
 
 if __name__ == "__main__":
     pipeline = IngestionPipeline()

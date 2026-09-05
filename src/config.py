@@ -15,5 +15,7 @@ class Settings(BaseSettings):
     langfuse_public_key:str = ""
     langfuse_secret_key:str = ""
     langfuse_host:str = "https://cloud.langfuse.com"
+    # GitHub webhook (HMAC-SHA256 secret for push event validation)
+    github_webhook_secret:str = ""
 
 settings = Settings()

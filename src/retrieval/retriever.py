@@ -1,5 +1,6 @@
 import re
 import sys
+import threading
 from dataclasses import dataclass
 from typing import List, Dict, Tuple
 
@@ -35,13 +36,10 @@ class Retriever:
         self.client = QdrantClient(url=settings.qdrant_url)
         self.embedding_model = TextEmbedding(model_name=settings.embedding_model)
         self.rerank = rerank
+        self._bm25_lock = threading.Lock()
 
         # ── Build BM25 index from Qdrant payload ──────────────────────────────
-        print("📚 Building BM25 index from Qdrant collection...")
-        self._all_chunks: List[dict] = self._scroll_all_payloads()
-        tokenized = [self._tokenize(c["content"]) for c in self._all_chunks]
-        self._bm25 = BM25Okapi(tokenized)
-        print(f"   BM25 index built over {len(self._all_chunks)} chunks.")
+        self.reload_bm25()
 
         # ── Load cross-encoder reranker ───────────────────────────────────────
         if self.rerank:
@@ -74,6 +72,25 @@ class Retriever:
             candidates = candidates[:top_k]
 
         return candidates
+
+    def reload_bm25(self):
+        """Re-scroll Qdrant payloads and rebuild the in-memory BM25 index.
+
+        Uses a build-then-swap pattern: the expensive I/O (scrolling Qdrant,
+        tokenizing) happens without holding the lock.  Only the final pointer
+        swap is protected, so concurrent ``retrieve()`` calls always see a
+        consistent (old *or* new) index — never a half-built one.
+        """
+        print("📚 Building/Reloading BM25 index from Qdrant collection...")
+        new_chunks: List[dict] = self._scroll_all_payloads()
+        tokenized = [self._tokenize(c["content"]) for c in new_chunks]
+        new_bm25 = BM25Okapi(tokenized)
+
+        with self._bm25_lock:
+            self._all_chunks = new_chunks
+            self._bm25 = new_bm25
+
+        print(f"   BM25 index built over {len(new_chunks)} chunks.")
 
     # ─────────────────────────────────────────────────────────────────────────
     # Dense retrieval
@@ -111,14 +128,20 @@ class Retriever:
 
     def _retrieve_bm25(self, query: str, top_k: int) -> List[RetrievedChunk]:
         tokens = self._tokenize(query)
-        scores = self._bm25.get_scores(tokens)
+
+        # Snapshot consistent pair of (bm25, chunks) under the lock
+        with self._bm25_lock:
+            bm25 = self._bm25
+            all_chunks = self._all_chunks
+
+        scores = bm25.get_scores(tokens)
 
         # Get top_k indices sorted by descending score
         top_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:top_k]
 
         chunks = []
         for idx in top_indices:
-            payload = self._all_chunks[idx]
+            payload = all_chunks[idx]
             chunks.append(
                 RetrievedChunk(
                     content=payload.get("content", ""),

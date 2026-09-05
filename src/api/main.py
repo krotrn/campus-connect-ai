@@ -13,6 +13,7 @@ from slowapi.util import get_remote_address
 
 from src.agent import create_agent_graph
 from src.api.tasks import IngestionStatus, get_status, trigger_ingestion
+from src.api.webhook import handle_github_webhook
 from src.config import settings
 from src.errors import (
     AEIAError,
@@ -392,3 +393,12 @@ async def ingestion_status():
         files_processed=state.get("files_processed", 0),
         error=state.get("error"),
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GitHub Webhook (HMAC-SHA256 authenticated, no API key)
+# ─────────────────────────────────────────────────────────────────────────────
+@app.post("/webhook/github", tags=["Webhook"])
+async def github_webhook(request: Request):
+    """Receive GitHub push events, pull corpus, and trigger incremental ingestion."""
+    return await handle_github_webhook(request)

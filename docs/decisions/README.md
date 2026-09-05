@@ -21,3 +21,7 @@ This directory documents the key architectural and technical decisions made for 
 | [0015](0015-v5-agentic-router-langgraph.md) | V5 Agentic Query Router & Non-RAG State Graph | Accepted | 2026-09-04 |
 | [0016](0016-v6-model-context-protocol-server.md) | V6 Model Context Protocol (MCP) Server (2026-07-28 Spec) | Accepted | 2026-09-05 |
 | [0017](0017-error-handling-and-upstream-degradation.md) | Error Handling Hierarchy and Upstream Graceful Degradation | Accepted | 2026-09-05 |
+| [0018](0018-bm25-thread-safe-hot-reload.md) | Thread-Safe BM25 In-Memory Index Hot-Reload | Accepted | 2026-09-06 |
+| [0019](0019-git-corpus-sync-and-diff-tracking.md) | Automated Git Synchronization and Diff Tracking | Accepted | 2026-09-06 |
+| [0020](0020-incremental-delta-only-ingestion.md) | Incremental Delta-Only Ingestion with Deterministic Point IDs | Accepted | 2026-09-06 |
+| [0021](0021-github-push-webhook-automation.md) | GitHub Push Webhook Automation with HMAC-SHA256 Authentication | Accepted | 2026-09-06 |

@@ -190,30 +190,36 @@ mindmap
 
 ### 3.4 `src/ingestion/pipeline.py`
 - **Relative Path**: [`../../src/ingestion/pipeline.py`](../../src/ingestion/pipeline.py)
-- **Role**: Complete codebase ingestion runner: scans files, manages SHA-256 embedding cache, computes embeddings with FastEmbed, and batch upserts points into Qdrant.
+- **Role**: Complete codebase ingestion runner: scans files, manages SHA-256 embedding cache, computes embeddings with FastEmbed, and batch upserts points into Qdrant. Supports both full recreate and incremental delta-only indexing.
 - **Technologies Needed**: `fastembed.TextEmbedding`, `qdrant_client`, SHA-256 hashing, batch processing.
 - **Anatomy & Critical Lines**:
   - `EmbeddingCache`: Disk-backed JSON cache (`.cache/embedding_cache.json`) mapping `sha256(content)` to 384-float vector.
-  - `scan_files()`: Recursively searches `corpus/campus-connect`, ignoring `node_modules`, `.git`, `.next`, and lockfiles. Handles dotfile edge cases (`.env.example`).
-  - `_get_embeddings()`: Checks cache first, batches misses into groups of 128, and computes vectors using local ONNX model.
-  - `run(recreate=True)`: Recreates or updates Qdrant collection, batch upserting points with full payload metadata.
+  - `_point_id()`: Computes deterministic 60-bit integers from `sha256(f"{file_path}::{chunk_index}")`, ensuring stable idempotent point IDs.
+  - `_delete_points_for_file()`: Scrolls and deletes points matching a specific `file_path` filter before re-indexing.
+  - `run(recreate=True)`: Recreates collection and indexes entire corpus.
+  - `run_incremental(changed_files)`: Purges stale points for changed/deleted files, re-chunks and upserts modified files without dropping collection.
 - **Verification**: `PYTHONPATH=. uv run python -m src.ingestion.pipeline`
-- **How to Improve**: Add parallel file reading using `multiprocessing` or `ThreadPoolExecutor`.
+
+### 3.4.1 `src/ingestion/git_sync.py`
+- **Relative Path**: [`../../src/ingestion/git_sync.py`](../../src/ingestion/git_sync.py)
+- **Role**: Automated git synchronization utility for remote corpus repositories.
+- **Technologies Needed**: `subprocess`, git porcelain commands (`rev-parse`, `pull`, `diff`).
+- **Anatomy & Critical Lines**:
+  - `GitPullResult`: Dataclass capturing `before_sha`, `after_sha`, `changed_files`, and `up_to_date`.
+  - `pull_corpus()`: Captures HEAD commit, pulls `origin main`, resolves changed files via `git diff --name-only <before>..<after>`, and detects up-to-date state.
 
 ### 3.5 `src/retrieval/retriever.py`
 - **Relative Path**: [`../../src/retrieval/retriever.py`](../../src/retrieval/retriever.py)
-- **Role**: Production hybrid retriever fusing dense vector search and sparse BM25Okapi search via 70/30 Weighted Reciprocal Rank Fusion (RRF).
-- **Technologies Needed**: `qdrant-client`, `rank-bm25`, Reciprocal Rank Fusion, text tokenization.
+- **Role**: Production hybrid retriever fusing dense vector search and sparse BM25Okapi search via 70/30 Weighted Reciprocal Rank Fusion (RRF), equipped with thread-safe hot-reload.
+- **Technologies Needed**: `qdrant-client`, `rank-bm25`, Reciprocal Rank Fusion, `threading.Lock`.
 - **Anatomy & Critical Lines**:
-  - `Retriever.__init__`: Connects to Qdrant, loads local `TextEmbedding`, calls `_scroll_all_payloads()`, tokenizes all chunks, and builds the in-memory BM25 index.
-  - `_tokenize()`: Code-aware tokenizer splitting on camelCase, snake_case, slashes, and dots.
-  - `_retrieve_dense()`: Embeds query and queries Qdrant with `limit=candidate_k`.
-  - `_retrieve_bm25()`: Computes BM25 scores across all chunks and sorts top candidates.
+  - `Retriever.__init__`: Connects to Qdrant, loads local `TextEmbedding`, initializes `_bm25_lock`, and calls `reload_bm25()`.
+  - `reload_bm25()`: Build-then-swap pattern; expensive scrolling and tokenization run without holding lock, followed by an atomic pointer swap under `_bm25_lock`.
+  - `_retrieve_bm25()`: Snapshots `(self._bm25, self._all_chunks)` under lock, ensuring consistent query scoring without blocking concurrent reloads.
   - `_reciprocal_rank_fusion()`: Merges dense and sparse candidates using:
     $$\text{RRF Score} = \frac{0.7}{60 + \text{rank}_{\text{dense}}} + \frac{0.3}{60 + \text{rank}_{\text{sparse}}}$$
   - Deduplicates on `(chunk.file_path, chunk.start_line)`.
-- **Verification**: Tested in `tests/test_retriever.py`. CLI smoke-test: `PYTHONPATH=. uv run python -m src.retrieval.retriever "auth"`.
-- **How to Improve**: Persist the tokenized BM25 index to disk with `pickle` or `joblib` to eliminate startup scrolling latency.
+- **Verification**: Tested in `tests/test_retriever.py` and `tests/test_incremental_ingestion.py`.
 
 ### 3.6 `src/generation/generator.py`
 - **Relative Path**: [`../../src/generation/generator.py`](../../src/generation/generator.py)
@@ -289,14 +295,20 @@ mindmap
   - `lifespan(app)`: Initializes singletons (`Retriever`, `AnswerGenerator`, LangGraph agent, MCP server).
   - Centralized handlers for `AEIAError`, `RateLimitExceeded`, and `APIError`.
   - Mounts `/mcp` streamable HTTP app.
-  - Endpoints: `GET /` (root), `GET /health`, `POST /ask`, `POST /agent/ask`, `POST /ingest`, `GET /ingest/status`.
-- **Verification**: Tested in `tests/test_api.py`.
+  - Endpoints: `GET /` (root), `GET /health`, `POST /ask`, `POST /agent/ask`, `POST /ingest`, `GET /ingest/status`, `POST /webhook/github`.
+- **Verification**: Tested in `tests/test_api.py` and `tests/test_incremental_ingestion.py`.
 
 ### 3.14 `src/api/tasks.py`
 - **Relative Path**: [`../../src/api/tasks.py`](../../src/api/tasks.py)
-- **Role**: Background task worker managing asynchronous corpus re-ingestion.
+- **Role**: Background task worker managing asynchronous full and incremental corpus ingestion with automatic BM25 index refreshing.
 - **Technologies Needed**: `asyncio`, thread pool execution.
-- **Anatomy**: `trigger_ingestion()` launches `_sync_ingest` inside `loop.run_in_executor`, tracking state (`RUNNING`, `COMPLETED`, `FAILED`) in memory.
+- **Anatomy**: `trigger_ingestion()` launches full recreate in background; `trigger_incremental_ingestion(changed_files)` executes delta-only indexing. Both invoke `_hot_reload_retriever()` upon completion.
+
+### 3.15 `src/api/webhook.py`
+- **Relative Path**: [`../../src/api/webhook.py`](../../src/api/webhook.py)
+- **Role**: GitHub push event webhook listener with cryptographic HMAC-SHA256 signature verification.
+- **Technologies Needed**: `hmac`, `hashlib`, FastAPI `Request`, constant-time digest verification.
+- **Anatomy**: Validates `X-Hub-Signature-256`, filters for `refs/heads/main`, executes `pull_corpus()`, schedules incremental ingestion in background, and responds with `202 Accepted`.
 
 ---
 
@@ -330,6 +342,7 @@ All test suites use `pytest` and can be run simultaneously via `uv run pytest -v
 | [`../../tests/test_mcp_protocol.py`](../../tests/test_mcp_protocol.py) | MCP Protocol | Verifies 2026-07-28 stateless HTTP headers, `tools/list` JSON-RPC, and `tools/call`. |
 | [`../../tests/test_mcp_tools.py`](../../tests/test_mcp_tools.py) | MCP Tools | Tests calling all 5 tools via MCP server interface and verifies output formats. |
 | [`../../tests/test_error_handling.py`](../../tests/test_error_handling.py) | Error Resilience | Tests HTTP 429 quota exception handling, Retry-After header, 503 Vector DB failure, and graceful chunk fallback. |
+| [`../../tests/test_incremental_ingestion.py`](../../tests/test_incremental_ingestion.py) | Live Sync & Webhook | Tests git sync, deterministic point IDs, HMAC-SHA256 signature verification, branch filtering, and BM25 thread safety. |
 
 ---
 
@@ -354,6 +367,10 @@ Every major technical choice is documented as an ADR:
 - [`0015-v5-agentic-router-langgraph.md`](../decisions/0015-v5-agentic-router-langgraph.md): State machine agentic router and non-RAG tools.
 - [`0016-v6-model-context-protocol-server.md`](../decisions/0016-v6-model-context-protocol-server.md): Model Context Protocol server (2026-07-28 stateless HTTP spec).
 - [`0017-error-handling-and-upstream-degradation.md`](../decisions/0017-error-handling-and-upstream-degradation.md): Centralized exception handling and upstream LLM quota degradation.
+- [`0018-bm25-thread-safe-hot-reload.md`](../decisions/0018-bm25-thread-safe-hot-reload.md): Thread-Safe BM25 In-Memory Index Hot-Reload.
+- [`0019-git-corpus-sync-and-diff-tracking.md`](../decisions/0019-git-corpus-sync-and-diff-tracking.md): Automated Git Synchronization and Diff Tracking.
+- [`0020-incremental-delta-only-ingestion.md`](../decisions/0020-incremental-delta-only-ingestion.md): Incremental Delta-Only Ingestion with Deterministic Point IDs.
+- [`0021-github-push-webhook-automation.md`](../decisions/0021-github-push-webhook-automation.md): GitHub Push Webhook Automation with HMAC-SHA256 Authentication.
 
 ---
 
