@@ -19,6 +19,12 @@
   - **Incremental Delta-Only Ingestion**: Re-indexes only touched files using deterministic chunk point IDs, eliminating vector DB downtime.
   - **GitHub Webhook (`POST /webhook/github`)**: Cryptographically verified HMAC-SHA256 push listener triggers instant background sync.
   - **Thread-Safe BM25 Hot-Reload**: Build-then-swap pattern ensures concurrent query threads never see incomplete index states during background ingestion.
+- **Interactive Web UI Playground (`GET /ui`)**: Single-page browser console with Markdown rendering, mode toggling (Direct RAG vs. Agent), telemetry metrics, and a slide-over code inspector drawer for verified source citations.
+- **Multi-Format Syntax-Aware Chunking**:
+  - **TypeScript/TSX**: Tree-Sitter AST parsing extracting functions, classes, interfaces, and types with JSDoc preservation.
+  - **Prisma**: Structural block parsing of complete `model` and `enum` declarations with relational integrity.
+  - **YAML / Compose**: Slices Docker Compose and CI workflows by top-level service/job blocks, preserving indentation.
+  - **Markdown & SQL**: Preserves heading hierarchy breadcrumbs and complete DDL statements.
 
 ---
 
@@ -155,3 +161,5 @@ Key architectural decisions are documented in [`docs/decisions/`](docs/decisions
 - [0019 — Automated Git Synchronization & Diff Tracking](docs/decisions/0019-git-corpus-sync-and-diff-tracking.md)
 - [0020 — Incremental Delta-Only Ingestion](docs/decisions/0020-incremental-delta-only-ingestion.md)
 - [0021 — GitHub Push Webhook Automation](docs/decisions/0021-github-push-webhook-automation.md)
+- [0022 — Interactive Web UI Playground](docs/decisions/0022-interactive-web-playground-ui.md)
+- [0023 — Multi-Format Syntax-Aware Chunking](docs/decisions/0023-multi-format-syntax-aware-chunking.md)

@@ -2,9 +2,10 @@ import time
 from contextlib import asynccontextmanager
 from typing import List, Optional
 
+from pathlib import Path
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from google.genai.errors import APIError
 from pydantic import BaseModel, Field
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -212,16 +213,37 @@ class IngestionResponse(BaseModel):
     error: Optional[str] = None
 
 
+STATIC_DIR = Path(__file__).parent / "static"
+STATIC_INDEX = STATIC_DIR / "index.html"
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Public endpoints (no auth)
 # ─────────────────────────────────────────────────────────────────────────────
 @app.get("/", tags=["General"])
-async def root():
+async def root(request: Request):
+    """API root. Redirects browsers to /ui while returning JSON to API clients."""
+    accept = request.headers.get("accept", "")
+    if "text/html" in accept:
+        return RedirectResponse(url="/ui", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+
     return {
         "message": "AI Engineering Intelligence Assistant is running",
         "docs_url": "/docs",
         "health_url": "/health",
+        "ui_url": "/ui",
     }
+
+
+@app.get("/ui", tags=["UI"], response_class=FileResponse)
+async def ui_playground():
+    """Serve the interactive Web UI playground."""
+    if not STATIC_INDEX.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="UI playground file not found",
+        )
+    return FileResponse(STATIC_INDEX)
 
 
 @app.get("/health", response_model=HealthResponse, tags=["General"])

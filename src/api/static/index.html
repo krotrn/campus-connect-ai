@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AEIA — AI Engineering Intelligence Assistant</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#ecfdf5',
+              400: '#34d399',
+              500: '#10b981',
+              600: '#059669',
+              700: '#047857',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Marked.js for Markdown -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- Highlight.js for Syntax Highlighting -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <style>
+    /* Custom scrollbars */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    pre code.hljs { border-radius: 0.5rem; padding: 1rem; font-size: 0.875rem; }
+    .prose code { color: #34d399; font-weight: 500; }
+    .prose p { margin-bottom: 0.75rem; line-height: 1.625; }
+    .prose ul { list-style-type: disc; margin-left: 1.25rem; margin-bottom: 0.75rem; }
+    .prose ol { list-style-type: decimal; margin-left: 1.25rem; margin-bottom: 0.75rem; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans min-h-screen flex flex-col antialiased selection:bg-emerald-500 selection:text-black">
+
+  <!-- Header -->
+  <header class="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur sticky top-0 z-30 px-4 lg:px-8 py-3 flex items-center justify-between">
+    <div class="flex items-center space-x-3">
+      <div class="w-9 h-9 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-lg">
+        ⚡
+      </div>
+      <div>
+        <div class="flex items-center space-x-2">
+          <span class="font-bold text-base tracking-tight text-white">AEIA</span>
+          <span class="px-2 py-0.5 text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full">v0.4.0</span>
+        </div>
+        <p class="text-xs text-slate-400">Engineering Intelligence for Campus Connect (~94k LOC)</p>
+      </div>
+    </div>
+
+    <!-- Live Status & Config -->
+    <div class="flex items-center space-x-3 text-xs">
+      <div id="statusBadge" class="hidden sm:flex items-center space-x-1.5 px-2.5 py-1 bg-slate-800 border border-slate-700 rounded-full text-slate-300">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span id="statusText">Checking Qdrant...</span>
+      </div>
+
+      <!-- API Key Setting -->
+      <div class="relative flex items-center">
+        <input id="apiKeyInput" type="password" placeholder="API Key" value="dev-key-change-me"
+          class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500 w-32 sm:w-44 pr-7" />
+        <button id="toggleApiKey" title="Toggle API Key visibility" class="absolute right-2 text-slate-400 hover:text-slate-200 text-xs">👁️</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Layout -->
+  <div class="flex-1 flex flex-col lg:flex-row max-w-7xl w-full mx-auto p-4 lg:p-6 gap-6">
+
+    <!-- Left Column: Controls & Suggestions -->
+    <aside class="lg:w-80 flex flex-col gap-5">
+      
+      <!-- Query Mode Selector -->
+      <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-4 shadow-sm">
+        <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2.5">Execution Mode</label>
+        <div class="grid grid-cols-2 gap-2 bg-slate-950 p-1 rounded-lg border border-slate-800">
+          <button id="modeRag" class="px-3 py-1.5 text-xs font-medium rounded-md bg-emerald-500 text-black shadow-sm transition">
+            Hybrid RAG
+          </button>
+          <button id="modeAgent" class="px-3 py-1.5 text-xs font-medium rounded-md text-slate-400 hover:text-white transition">
+            LangGraph Agent
+          </button>
+        </div>
+        <p id="modeDescription" class="mt-2 text-[11px] text-slate-400 leading-relaxed">
+          Direct 70/30 Dense+BM25 RRF search fused with Gemini 3.6 Flash.
+        </p>
+      </div>
+
+      <!-- Quick Starter Prompts -->
+      <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-4 shadow-sm flex-1">
+        <h3 class="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-3">Example Queries</h3>
+        <div class="space-y-2 text-xs">
+          <button class="example-btn w-full text-left p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 hover:border-emerald-500/50 hover:bg-slate-800/50 transition flex items-start space-x-2" data-query="Where is user authentication and session management implemented?" data-mode="rag">
+            <span class="text-emerald-400">🔑</span>
+            <div>
+              <p class="font-medium text-slate-200">Authentication Flow</p>
+              <p class="text-[11px] text-slate-400">NextAuth & session middleware</p>
+            </div>
+          </button>
+
+          <button class="example-btn w-full text-left p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 hover:border-emerald-500/50 hover:bg-slate-800/50 transition flex items-start space-x-2" data-query="Which files changed in commit 6e19f61 and what was updated?" data-mode="agent">
+            <span class="text-indigo-400">📜</span>
+            <div>
+              <p class="font-medium text-slate-200">Git Commit Audit</p>
+              <p class="text-[11px] text-slate-400">Inspects commit hash diff</p>
+            </div>
+          </button>
+
+          <button class="example-btn w-full text-left p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 hover:border-emerald-500/50 hover:bg-slate-800/50 transition flex items-start space-x-2" data-query="What application services depend on Redis?" data-mode="agent">
+            <span class="text-amber-400">🔗</span>
+            <div>
+              <p class="font-medium text-slate-200">Dependency Mapping</p>
+              <p class="text-[11px] text-slate-400">Scans compose & import links</p>
+            </div>
+          </button>
+
+          <button class="example-btn w-full text-left p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 hover:border-emerald-500/50 hover:bg-slate-800/50 transition flex items-start space-x-2" data-query="Show me the recent 5 git commits on this codebase." data-mode="agent">
+            <span class="text-cyan-400">🕒</span>
+            <div>
+              <p class="font-medium text-slate-200">Recent Commits</p>
+              <p class="text-[11px] text-slate-400">Queries git repository log</p>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <!-- Architecture Badge -->
+      <div class="text-[11px] text-slate-500 p-2 text-center">
+        BGE-small (384d) • BM25Okapi • Qdrant • Gemini 3.6 Flash
+      </div>
+    </aside>
+
+    <!-- Right Column: Interactive Console & Results -->
+    <main class="flex-1 flex flex-col gap-4">
+
+      <!-- Query Form -->
+      <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-4 shadow-sm">
+        <form id="queryForm" class="flex flex-col gap-3">
+          <div class="relative">
+            <textarea id="queryInput" rows="3" placeholder="Ask anything about Campus Connect code, architecture, or git history... (Press Enter to submit)"
+              class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition resize-none"></textarea>
+            <div class="absolute right-3 bottom-3 flex items-center space-x-2">
+              <span class="text-[11px] text-slate-500 hidden sm:inline">Shift + Enter for new line</span>
+              <button type="submit" id="submitBtn"
+                class="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-xs rounded-lg shadow transition flex items-center space-x-1.5 disabled:opacity-50">
+                <span>Ask</span>
+                <span id="btnSpinner" class="hidden animate-spin">⏳</span>
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <!-- Telemetry Card (Hidden until response) -->
+      <div id="telemetryBar" class="hidden grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div class="bg-slate-900/60 border border-slate-800/80 rounded-lg p-2.5">
+          <span class="text-[10px] text-slate-400 uppercase tracking-wider block">Route</span>
+          <span id="metricRoute" class="text-xs font-semibold text-emerald-400">Direct RAG</span>
+        </div>
+        <div class="bg-slate-900/60 border border-slate-800/80 rounded-lg p-2.5">
+          <span class="text-[10px] text-slate-400 uppercase tracking-wider block">Total Latency</span>
+          <span id="metricLatency" class="text-xs font-semibold text-slate-200">-</span>
+        </div>
+        <div class="bg-slate-900/60 border border-slate-800/80 rounded-lg p-2.5">
+          <span class="text-[10px] text-slate-400 uppercase tracking-wider block">Retrieved Chunks</span>
+          <span id="metricChunks" class="text-xs font-semibold text-slate-200">0</span>
+        </div>
+        <div class="bg-slate-900/60 border border-slate-800/80 rounded-lg p-2.5">
+          <span class="text-[10px] text-slate-400 uppercase tracking-wider block">Model</span>
+          <span id="metricModel" class="text-xs font-semibold text-slate-200">gemini-3.6-flash</span>
+        </div>
+      </div>
+
+      <!-- Response Pane -->
+      <div id="responseContainer" class="flex-1 bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm min-h-[360px] flex flex-col">
+        <div id="emptyState" class="flex-1 flex flex-col items-center justify-center text-center p-8 text-slate-500">
+          <div class="text-4xl mb-3">⚡</div>
+          <h3 class="text-sm font-semibold text-slate-300 mb-1">Codebase Intelligence Console</h3>
+          <p class="text-xs max-w-md">Type an engineering question above or click one of the suggested prompts to inspect real grounded code citations.</p>
+        </div>
+
+        <!-- Answer Markdown -->
+        <div id="answerSection" class="hidden flex-1 flex flex-col">
+          <div class="flex items-center justify-between pb-3 mb-4 border-b border-slate-800">
+            <h2 class="text-xs font-semibold text-slate-300 uppercase tracking-wider">Answer</h2>
+            <button id="copyBtn" class="text-xs text-slate-400 hover:text-slate-200 flex items-center space-x-1">
+              <span>📋</span><span>Copy Markdown</span>
+            </button>
+          </div>
+          <div id="answerText" class="prose prose-invert max-w-none text-sm text-slate-200 leading-relaxed mb-6"></div>
+
+          <!-- Citations & Sources Section -->
+          <div id="citationsSection" class="hidden mt-auto pt-4 border-t border-slate-800">
+            <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">Verified Source Citations</h3>
+            <div id="citationsList" class="flex flex-wrap gap-2"></div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- Code Inspector Drawer / Modal -->
+  <div id="codeModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+    <div class="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl max-w-4xl w-full max-h-[85vh] flex flex-col overflow-hidden">
+      <!-- Modal Header -->
+      <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between bg-slate-950">
+        <div>
+          <span id="modalFilePath" class="text-sm font-mono font-semibold text-emerald-400">file.ts</span>
+          <span id="modalLines" class="ml-2 text-xs text-slate-400 font-mono">#L10-L40</span>
+        </div>
+        <button id="closeModal" class="text-slate-400 hover:text-white text-lg font-bold px-2 py-1">✕</button>
+      </div>
+      <!-- Modal Content -->
+      <div class="p-4 overflow-y-auto flex-1 bg-slate-950 font-mono text-xs">
+        <pre><code id="modalCode" class="hljs language-typescript"></code></pre>
+      </div>
+      <!-- Modal Footer -->
+      <div class="px-5 py-2.5 border-t border-slate-800 flex items-center justify-between bg-slate-900 text-xs text-slate-400">
+        <span id="modalScore">Score: 0.0000</span>
+        <button id="modalCopyCode" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded transition">Copy Snippet</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // State
+    let currentMode = 'rag'; // 'rag' | 'agent'
+    let currentResponseData = null;
+
+    // Elements
+    const modeRagBtn = document.getElementById('modeRag');
+    const modeAgentBtn = document.getElementById('modeAgent');
+    const modeDesc = document.getElementById('modeDescription');
+    const queryForm = document.getElementById('queryForm');
+    const queryInput = document.getElementById('queryInput');
+    const submitBtn = document.getElementById('submitBtn');
+    const btnSpinner = document.getElementById('btnSpinner');
+    const apiKeyInput = document.getElementById('apiKeyInput');
+    const toggleApiKeyBtn = document.getElementById('toggleApiKey');
+    const statusText = document.getElementById('statusText');
+    const statusBadge = document.getElementById('statusBadge');
+    const emptyState = document.getElementById('emptyState');
+    const answerSection = document.getElementById('answerSection');
+    const answerText = document.getElementById('answerText');
+    const citationsSection = document.getElementById('citationsSection');
+    const citationsList = document.getElementById('citationsList');
+    const telemetryBar = document.getElementById('telemetryBar');
+    const metricRoute = document.getElementById('metricRoute');
+    const metricLatency = document.getElementById('metricLatency');
+    const metricChunks = document.getElementById('metricChunks');
+    const codeModal = document.getElementById('codeModal');
+    const modalFilePath = document.getElementById('modalFilePath');
+    const modalLines = document.getElementById('modalLines');
+    const modalCode = document.getElementById('modalCode');
+    const modalScore = document.getElementById('modalScore');
+    const closeModal = document.getElementById('closeModal');
+    const copyBtn = document.getElementById('copyBtn');
+    const modalCopyCode = document.getElementById('modalCopyCode');
+
+    // LocalStorage API key persistence
+    const savedKey = localStorage.getItem('aeia_api_key');
+    if (savedKey) apiKeyInput.value = savedKey;
+    apiKeyInput.addEventListener('input', () => {
+      localStorage.setItem('aeia_api_key', apiKeyInput.value.trim());
+    });
+
+    toggleApiKeyBtn.addEventListener('click', () => {
+      apiKeyInput.type = apiKeyInput.type === 'password' ? 'text' : 'password';
+    });
+
+    // Health check on startup
+    async function checkHealth() {
+      try {
+        const res = await fetch('/health');
+        if (res.ok) {
+          const data = await res.json();
+          statusBadge.classList.remove('hidden');
+          statusText.textContent = `Qdrant Healthy (${data.indexed_points.toLocaleString()} points)`;
+        } else {
+          statusBadge.classList.remove('hidden');
+          statusText.textContent = 'Degraded';
+          statusText.previousElementSibling.className = 'w-2 h-2 rounded-full bg-amber-400';
+        }
+      } catch (err) {
+        statusBadge.classList.remove('hidden');
+        statusText.textContent = 'Server Offline';
+        statusText.previousElementSibling.className = 'w-2 h-2 rounded-full bg-rose-500';
+      }
+    }
+    checkHealth();
+
+    // Mode Toggle
+    function setMode(mode) {
+      currentMode = mode;
+      if (mode === 'rag') {
+        modeRagBtn.className = 'px-3 py-1.5 text-xs font-medium rounded-md bg-emerald-500 text-black shadow-sm transition';
+        modeAgentBtn.className = 'px-3 py-1.5 text-xs font-medium rounded-md text-slate-400 hover:text-white transition';
+        modeDesc.textContent = 'Direct 70/30 Dense+BM25 RRF search fused with Gemini 3.6 Flash.';
+      } else {
+        modeAgentBtn.className = 'px-3 py-1.5 text-xs font-medium rounded-md bg-indigo-500 text-white shadow-sm transition';
+        modeRagBtn.className = 'px-3 py-1.5 text-xs font-medium rounded-md text-slate-400 hover:text-white transition';
+        modeDesc.textContent = 'LangGraph State Graph routing between Git History, Diffs, Dependency Scans, and RAG.';
+      }
+    }
+    modeRagBtn.addEventListener('click', () => setMode('rag'));
+    modeAgentBtn.addEventListener('click', () => setMode('agent'));
+
+    // Example buttons
+    document.querySelectorAll('.example-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        queryInput.value = btn.getAttribute('data-query');
+        setMode(btn.getAttribute('data-mode'));
+        queryForm.dispatchEvent(new Event('submit'));
+      });
+    });
+
+    // Enter key submits (Shift+Enter adds newline)
+    queryInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        queryForm.dispatchEvent(new Event('submit'));
+      }
+    });
+
+    // Form Submission
+    queryForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const question = queryInput.value.trim();
+      if (!question) return;
+
+      submitBtn.disabled = true;
+      btnSpinner.classList.remove('hidden');
+      emptyState.classList.add('hidden');
+      answerSection.classList.remove('hidden');
+      answerText.innerHTML = '<div class="flex items-center space-x-2 text-slate-400"><span class="animate-spin">⚡</span><span>Analyzing codebase & synthesizing grounded response...</span></div>';
+      citationsSection.classList.add('hidden');
+      telemetryBar.classList.add('hidden');
+
+      const endpoint = currentMode === 'agent' ? '/agent/ask' : '/ask';
+      const apiKey = apiKeyInput.value.trim();
+      const startTime = performance.now();
+
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': apiKey,
+          },
+          body: JSON.stringify({ question })
+        });
+
+        const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || `Server error (${res.status})`);
+        }
+
+        const data = await res.json();
+        currentResponseData = data;
+
+        // Render Markdown
+        answerText.innerHTML = marked.parse(data.answer);
+        document.querySelectorAll('#answerText pre code').forEach(el => hljs.highlightElement(el));
+
+        // Telemetry
+        telemetryBar.classList.remove('hidden');
+        metricRoute.textContent = data.route_taken || (currentMode === 'agent' ? 'LangGraph Agent' : 'Direct Hybrid RAG');
+        metricLatency.textContent = `${data.latency_seconds ? data.latency_seconds.toFixed(2) : elapsed}s`;
+        metricChunks.textContent = (data.sources || []).length;
+
+        // Render Citations
+        citationsList.innerHTML = '';
+        if (data.sources && data.sources.length > 0) {
+          citationsSection.classList.remove('hidden');
+          data.sources.forEach((s, idx) => {
+            const chip = document.createElement('button');
+            chip.className = 'px-2.5 py-1 text-xs font-mono rounded-md bg-slate-800 border border-slate-700 hover:border-emerald-500/60 hover:bg-slate-750 text-slate-300 flex items-center space-x-1.5 transition';
+            chip.innerHTML = `<span class="text-emerald-400 text-[10px]">#${idx+1}</span> <span>${s.file_path}#L${s.start_line}-L${s.end_line}</span>`;
+            chip.addEventListener('click', () => openCodeModal(s));
+            citationsList.appendChild(chip);
+          });
+        }
+
+      } catch (err) {
+        answerText.innerHTML = `<div class="p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-300 text-xs font-mono">⚠️ Error: ${err.message}</div>`;
+      } finally {
+        submitBtn.disabled = false;
+        btnSpinner.classList.add('hidden');
+      }
+    });
+
+    // Code Modal
+    function openCodeModal(chunk) {
+      modalFilePath.textContent = chunk.file_path;
+      modalLines.textContent = `#L${chunk.start_line}-L${chunk.end_line}`;
+      modalCode.textContent = chunk.content;
+      modalScore.textContent = `Relevance Score: ${chunk.score ? chunk.score.toFixed(4) : 'N/A'}`;
+      hljs.highlightElement(modalCode);
+      codeModal.classList.remove('hidden');
+    }
+
+    closeModal.addEventListener('click', () => codeModal.classList.add('hidden'));
+    codeModal.addEventListener('click', (e) => {
+      if (e.target === codeModal) codeModal.classList.add('hidden');
+    });
+
+    // Copy handlers
+    copyBtn.addEventListener('click', () => {
+      if (!currentResponseData) return;
+      navigator.clipboard.writeText(currentResponseData.answer);
+      copyBtn.innerHTML = '<span>✅</span><span>Copied!</span>';
+      setTimeout(() => { copyBtn.innerHTML = '<span>📋</span><span>Copy Markdown</span>'; }, 2000);
+    });
+
+    modalCopyCode.addEventListener('click', () => {
+      navigator.clipboard.writeText(modalCode.textContent);
+      modalCopyCode.textContent = 'Copied!';
+      setTimeout(() => { modalCopyCode.textContent = 'Copy Snippet'; }, 2000);
+    });
+  </script>
+</body>
+</html>
+

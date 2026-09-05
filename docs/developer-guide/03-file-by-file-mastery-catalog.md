@@ -178,15 +178,25 @@ mindmap
 
 ### 3.3 `src/ingestion/chunker.py`
 - **Relative Path**: [`../../src/ingestion/chunker.py`](../../src/ingestion/chunker.py)
-- **Role**: Code-aware splitting with exact line number preservation and semantic prefix enrichment.
-- **Technologies Needed**: `langchain-text-splitters`, regular expressions, string parsing.
+- **Role**: Multi-format syntax-aware code and config chunker dispatching to AST and structural block parsers.
+- **Technologies Needed**: `tree-sitter`, `tree-sitter-typescript`, regular expressions, structural parsing.
 - **Anatomy & Critical Lines**:
   - `CodeChunk` dataclass: Holds `content`, `file_path`, `start_line`, `end_line`, `file_type`, and `chunk_index`.
-  - `CodeAwareChunker.__init__`: Sets up `ts_splitter`, `md_splitter`, and `generic_splitter` with chunk size 800 and overlap 100.
-  - `_build_semantic_prefix()`: Detects Docker Compose YAML, SQL migrations, and `.env` files and prepends descriptive natural language headers.
-  - `_find_line_number()`: Maps chunk text substrings back to original 1-indexed file line numbers by counting newlines.
-- **Verification**: Tested in `tests/test_chunker.py`.
-- **How to Improve**: Add Tree-sitter AST parsing for granular Python, Go, or Rust support.
+  - `CodeAwareChunker.chunk_file()`: Delegates to `TreeSitterCodeParser` for `.ts`/`.tsx`, `PrismaBlockParser` for `.prisma`, `YamlBlockParser` for `.yml`, `MarkdownSectionParser` for `.md`, and `SqlStatementParser` for `.sql`.
+  - `_build_semantic_prefix()`: Prepends descriptive natural language headers to Docker Compose YAML, SQL migrations, and `.env` files.
+- **Verification**: Tested in `tests/test_chunker.py` and `tests/test_syntax_chunkers.py`.
+
+### 3.3.1 `src/ingestion/ast_chunker.py`
+- **Relative Path**: [`../../src/ingestion/ast_chunker.py`](../../src/ingestion/ast_chunker.py)
+- **Role**: Tree-Sitter AST parser for TypeScript and TSX code chunking.
+- **Technologies Needed**: `tree_sitter.Parser`, `tree_sitter_typescript`.
+- **Anatomy**: Parses AST nodes for functions, classes, interfaces, and types; preserves leading comments and JSDocs; bundles short statements below threshold into coherent chunks.
+
+### 3.3.2 `src/ingestion/block_parsers.py`
+- **Relative Path**: [`../../src/ingestion/block_parsers.py`](../../src/ingestion/block_parsers.py)
+- **Role**: Syntax-aware structural block parsers for Prisma, YAML, Markdown, and SQL.
+- **Technologies Needed**: Regex multiline grammars, line-number tracking.
+- **Anatomy**: `PrismaBlockParser` (atomic models/enums), `YamlBlockParser` (atomic Compose services and CI jobs), `MarkdownSectionParser` (header hierarchy), and `SqlStatementParser` (atomic DDL statements).
 
 ### 3.4 `src/ingestion/pipeline.py`
 - **Relative Path**: [`../../src/ingestion/pipeline.py`](../../src/ingestion/pipeline.py)
@@ -310,6 +320,12 @@ mindmap
 - **Technologies Needed**: `hmac`, `hashlib`, FastAPI `Request`, constant-time digest verification.
 - **Anatomy**: Validates `X-Hub-Signature-256`, filters for `refs/heads/main`, executes `pull_corpus()`, schedules incremental ingestion in background, and responds with `202 Accepted`.
 
+### 3.16 `src/api/static/index.html`
+- **Relative Path**: [`../../src/api/static/index.html`](../../src/api/static/index.html)
+- **Role**: Zero-dependency, single-page application serving as the interactive engineering intelligence console and playground.
+- **Technologies Needed**: Tailwind CSS, Marked.js, Highlight.js, Vanilla JS.
+- **Anatomy**: Features mode switching (Pure RAG vs. LangGraph Agent), prompt starters, Markdown rendering with syntax highlighting, telemetry cards, and an interactive slide-over code inspector drawer for verified source citations.
+
 ---
 
 ## 4. Evaluation Suite (`evals/`)
@@ -343,6 +359,8 @@ All test suites use `pytest` and can be run simultaneously via `uv run pytest -v
 | [`../../tests/test_mcp_tools.py`](../../tests/test_mcp_tools.py) | MCP Tools | Tests calling all 5 tools via MCP server interface and verifies output formats. |
 | [`../../tests/test_error_handling.py`](../../tests/test_error_handling.py) | Error Resilience | Tests HTTP 429 quota exception handling, Retry-After header, 503 Vector DB failure, and graceful chunk fallback. |
 | [`../../tests/test_incremental_ingestion.py`](../../tests/test_incremental_ingestion.py) | Live Sync & Webhook | Tests git sync, deterministic point IDs, HMAC-SHA256 signature verification, branch filtering, and BM25 thread safety. |
+| [`../../tests/test_ui.py`](../../tests/test_ui.py) | Web Playground | Tests `GET /ui` HTML delivery, browser redirect negotiation on `GET /`, and API client JSON responses. |
+| [`../../tests/test_syntax_chunkers.py`](../../tests/test_syntax_chunkers.py) | Syntax Chunkers | Tests Tree-Sitter AST parser (TS/TSX), Prisma blocks, YAML compose services, Markdown sections, and SQL DDL. |
 
 ---
 
@@ -371,6 +389,8 @@ Every major technical choice is documented as an ADR:
 - [`0019-git-corpus-sync-and-diff-tracking.md`](../decisions/0019-git-corpus-sync-and-diff-tracking.md): Automated Git Synchronization and Diff Tracking.
 - [`0020-incremental-delta-only-ingestion.md`](../decisions/0020-incremental-delta-only-ingestion.md): Incremental Delta-Only Ingestion with Deterministic Point IDs.
 - [`0021-github-push-webhook-automation.md`](../decisions/0021-github-push-webhook-automation.md): GitHub Push Webhook Automation with HMAC-SHA256 Authentication.
+- [`0022-interactive-web-playground-ui.md`](../decisions/0022-interactive-web-playground-ui.md): Interactive Web UI Playground & Visual Citation Inspector.
+- [`0023-multi-format-syntax-aware-chunking.md`](../decisions/0023-multi-format-syntax-aware-chunking.md): Multi-Format Syntax-Aware Chunking (Tree-Sitter AST & Structural Block Parsers).
 
 ---
 
