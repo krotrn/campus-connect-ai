@@ -52,7 +52,12 @@ class AnswerGenerator:
             )
         return "\n".join(parts)
 
-    def generate(self, question: str, chunks: List[RetrievedChunk]) -> AnswerResponse:
+    def generate(
+        self,
+        question: str,
+        chunks: List[RetrievedChunk],
+        history: Optional[List[Any]] = None,
+    ) -> AnswerResponse:
         sources = [
             SourceCitation(
                 file_path=c.file_path,
@@ -75,7 +80,18 @@ class AnswerGenerator:
             )
 
         context_str = self._build_context_block(chunks)
+        history_str = ""
+        if history:
+            history_lines = []
+            for msg in history[-4:]:
+                role = "User" if getattr(msg, "role", "") == "user" else "Assistant"
+                content = getattr(msg, "content", "")
+                truncated = content[:250] + "..." if len(content) > 250 else content
+                history_lines.append(f"{role}: {truncated}")
+            history_str = "Prior Conversation Context:\n" + "\n".join(history_lines) + "\n\n"
+
         user_prompt = (
+            f"{history_str}"
             f"Context from codebase:\n"
             f"{context_str}\n\n"
             f"Question: {question}\n\n"
@@ -84,7 +100,7 @@ class AnswerGenerator:
 
         answer_text = ""
         last_error = None
-        for model in [self.model_name, "gemini-2.5-flash-lite"]:
+        for model in [self.model_name, "gemini-2.5-flash", "gemini-2.5-flash-lite"]:
             try:
                 response = self.client.models.generate_content(
                     model=model,

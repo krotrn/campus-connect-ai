@@ -287,6 +287,16 @@ mindmap
   - Sets entrypoint to `router`, wires conditional edges to the selected branch, and converges all branches to `synthesizer`.
 - **Verification**: Tested in `tests/test_agent_api.py`.
 
+### 3.11.1 `src/agent/memory.py`
+- **Relative Path**: [`../../src/agent/memory.py`](../../src/agent/memory.py)
+- **Role**: Multi-turn conversational session memory and coreference query rewriter.
+- **Technologies Needed**: Thread-safe locks, sliding window data structures, Gemini structured query rewriting.
+- **Anatomy & Critical Lines**:
+  - `Turn` & `SessionMemory`: Dataclasses maintaining a sliding window of recent conversation turns (default `max_turns=5`) with timestamps.
+  - `SessionMemoryManager`: Thread-safe registry storing and retrieving active sessions with automatic TTL expiration cleanup.
+  - `rewrite_query_with_history(question, history, client, model)`: Analyzes follow-up questions for pronouns or implicit references (e.g., "what does it do?", "show me its tests"). Fast heuristic bypasses rewriting if the query is standalone; otherwise prompts Gemini to expand references into a fully self-contained retrieval query.
+- **Verification**: Tested in `tests/test_memory.py`.
+
 ### 3.12 `src/mcp/server.py`
 - **Relative Path**: [`../../src/mcp/server.py`](../../src/mcp/server.py)
 - **Role**: Official Model Context Protocol (MCP) server adhering to the 2026-07-28 specification.
@@ -370,6 +380,7 @@ All test suites use `pytest` and can be run simultaneously via `uv run pytest -v
 | [`../../tests/test_ui.py`](../../tests/test_ui.py) | Web Playground | Tests `GET /ui` HTML delivery, browser redirect negotiation on `GET /`, and API client JSON responses. |
 | [`../../tests/test_syntax_chunkers.py`](../../tests/test_syntax_chunkers.py) | Syntax Chunkers | Tests Tree-Sitter AST parser (TS/TSX), Prisma blocks, YAML compose services, Markdown sections, and SQL DDL. |
 | [`../../tests/test_generation_eval.py`](../../tests/test_generation_eval.py) | RAG Triad Evals | Tests LLM judge scoring, faithful vs hallucinated claim detection, and benchmark summary aggregation. |
+| [`../../tests/test_memory.py`](../../tests/test_memory.py) | Multi-Turn Memory | Tests sliding-window session management, standalone query bypass, LLM pronoun rewriting, and API integration. |
 
 ---
 
@@ -401,6 +412,7 @@ Every major technical choice is documented as an ADR:
 - [`0022-interactive-web-playground-ui.md`](../decisions/0022-interactive-web-playground-ui.md): Interactive Web UI Playground & Visual Citation Inspector.
 - [`0023-multi-format-syntax-aware-chunking.md`](../decisions/0023-multi-format-syntax-aware-chunking.md): Multi-Format Syntax-Aware Chunking (Tree-Sitter AST & Structural Block Parsers).
 - [`0024-rag-triad-generation-evaluation.md`](../decisions/0024-rag-triad-generation-evaluation.md): Automated RAG Triad Generation Evaluation Suite.
+- [`0025-conversational-memory-and-coreference-rewriter.md`](../decisions/0025-conversational-memory-and-coreference-rewriter.md): Conversational Memory and Coreference Query Rewriter.
 
 ---
 

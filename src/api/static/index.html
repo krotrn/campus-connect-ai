@@ -66,6 +66,12 @@
         <span id="statusText">Checking Qdrant...</span>
       </div>
 
+      <!-- New Session Button -->
+      <button id="newSessionBtn" title="Start a fresh conversation session"
+        class="hidden sm:flex items-center space-x-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-300 hover:text-white transition">
+        <span>🔄</span><span>New Chat</span>
+      </button>
+
       <!-- API Key Setting -->
       <div class="relative flex items-center">
         <input id="apiKeyInput" type="password" placeholder="API Key" value="dev-key-change-me"
@@ -238,6 +244,7 @@
     // State
     let currentMode = 'rag'; // 'rag' | 'agent'
     let currentResponseData = null;
+    let currentSessionId = null;
 
     // Elements
     const modeRagBtn = document.getElementById('modeRag');
@@ -269,6 +276,8 @@
     const copyBtn = document.getElementById('copyBtn');
     const modalCopyCode = document.getElementById('modalCopyCode');
 
+    const newSessionBtn = document.getElementById('newSessionBtn');
+
     // LocalStorage API key persistence
     const savedKey = localStorage.getItem('aeia_api_key');
     if (savedKey) apiKeyInput.value = savedKey;
@@ -279,6 +288,19 @@
     toggleApiKeyBtn.addEventListener('click', () => {
       apiKeyInput.type = apiKeyInput.type === 'password' ? 'text' : 'password';
     });
+
+    if (newSessionBtn) {
+      newSessionBtn.addEventListener('click', () => {
+        currentSessionId = null;
+        currentResponseData = null;
+        queryInput.value = '';
+        emptyState.classList.remove('hidden');
+        answerSection.classList.add('hidden');
+        telemetryBar.classList.add('hidden');
+        newSessionBtn.innerHTML = '<span>✅</span><span>Reset!</span>';
+        setTimeout(() => { newSessionBtn.innerHTML = '<span>🔄</span><span>New Chat</span>'; }, 1200);
+      });
+    }
 
     // Health check on startup
     async function checkHealth() {
@@ -359,7 +381,7 @@
             'Content-Type': 'application/json',
             'X-API-Key': apiKey,
           },
-          body: JSON.stringify({ question })
+          body: JSON.stringify({ question, session_id: currentSessionId })
         });
 
         const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
@@ -371,15 +393,23 @@
 
         const data = await res.json();
         currentResponseData = data;
+        if (data.session_id) currentSessionId = data.session_id;
 
-        // Render Markdown
-        answerText.innerHTML = marked.parse(data.answer);
+        // Render Markdown & Coreference Notice
+        let htmlContent = '';
+        if (data.rewritten_question) {
+          htmlContent += `<div class="mb-3 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-300 text-xs flex items-center space-x-2">
+            <span>🔄</span><span><b>Expanded Context Query:</b> ${data.rewritten_question}</span>
+          </div>`;
+        }
+        htmlContent += marked.parse(data.answer);
+        answerText.innerHTML = htmlContent;
         document.querySelectorAll('#answerText pre code').forEach(el => hljs.highlightElement(el));
 
         // Telemetry
         telemetryBar.classList.remove('hidden');
-        metricRoute.textContent = data.route_taken || (currentMode === 'agent' ? 'LangGraph Agent' : 'Direct Hybrid RAG');
-        metricLatency.textContent = `${data.latency_seconds ? data.latency_seconds.toFixed(2) : elapsed}s`;
+        metricRoute.textContent = data.route || data.route_taken || (currentMode === 'agent' ? 'LangGraph Agent' : 'Direct Hybrid RAG');
+        metricLatency.textContent = `${data.latency_ms ? (data.latency_ms / 1000).toFixed(2) : elapsed}s`;
         metricChunks.textContent = (data.sources || []).length;
 
         // Render Citations

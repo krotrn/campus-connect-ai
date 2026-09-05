@@ -26,6 +26,7 @@
   - **YAML / Compose**: Slices Docker Compose and CI workflows by top-level service/job blocks, preserving indentation.
   - **Markdown & SQL**: Preserves heading hierarchy breadcrumbs and complete DDL statements.
 - **RAG Triad Generation Evaluation**: Automated LLM-as-a-Judge benchmark (`evals/generation_eval.py`) evaluating **Faithfulness** (hallucination check), **Answer Relevance**, and **Context Precision** across 20 golden test queries.
+- **Multi-Turn Conversational Memory**: Sliding-window session management (`src/agent/memory.py`) with greedy coreference query rewriting that resolves pronouns ("that", "its", "those files") before search retrieval.
 
 ---
 
@@ -165,3 +166,4 @@ Key architectural decisions are documented in [`docs/decisions/`](docs/decisions
 - [0022 — Interactive Web UI Playground](docs/decisions/0022-interactive-web-playground-ui.md)
 - [0023 — Multi-Format Syntax-Aware Chunking](docs/decisions/0023-multi-format-syntax-aware-chunking.md)
 - [0024 — Automated RAG Triad Generation Evaluation](docs/decisions/0024-rag-triad-generation-evaluation.md)
+- [0025 — Multi-Turn Conversational Memory](docs/decisions/0025-conversational-memory-and-coreference-rewriter.md)

@@ -50,7 +50,7 @@ def flush():
 # ─────────────────────────────────────────────────────────────────────────────
 # Traced RAG pipeline
 # ─────────────────────────────────────────────────────────────────────────────
-def traced_ask(question: str, top_k: int, retriever, generator) -> dict:
+def traced_ask(question: str, top_k: int, retriever, generator, history=None) -> dict:
     """
     Execute the full RAG pipeline with Langfuse tracing.
 
@@ -58,16 +58,16 @@ def traced_ask(question: str, top_k: int, retriever, generator) -> dict:
     Returns dict with: answer, sources, latency_ms, trace_id
     """
     if not _langfuse:
-        return _untraced_ask(question, top_k, retriever, generator)
+        return _untraced_ask(question, top_k, retriever, generator, history=history)
 
-    return _traced_ask_impl(question, top_k, retriever, generator)
+    return _traced_ask_impl(question, top_k, retriever, generator, history=history)
 
 
-def _untraced_ask(question: str, top_k: int, retriever, generator) -> dict:
+def _untraced_ask(question: str, top_k: int, retriever, generator, history=None) -> dict:
     """Plain execution without any tracing overhead."""
     start = time.time()
     chunks = retriever.retrieve(question, top_k=top_k)
-    result = generator.generate(question, chunks)
+    result = generator.generate(question, chunks, history=history)
     latency_ms = round((time.time() - start) * 1000, 2)
 
     return {
@@ -78,7 +78,7 @@ def _untraced_ask(question: str, top_k: int, retriever, generator) -> dict:
     }
 
 
-def _traced_ask_impl(question: str, top_k: int, retriever, generator) -> dict:
+def _traced_ask_impl(question: str, top_k: int, retriever, generator, history=None) -> dict:
     """Full Langfuse-traced execution."""
     trace = _langfuse.trace(
         name="rag-ask",
@@ -116,7 +116,7 @@ def _traced_ask_impl(question: str, top_k: int, retriever, generator) -> dict:
     )
 
     generation_start = time.time()
-    result = generator.generate(question, chunks)
+    result = generator.generate(question, chunks, history=history)
     generation_ms = round((time.time() - generation_start) * 1000, 2)
 
     generation_span.end(

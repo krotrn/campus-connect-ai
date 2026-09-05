@@ -13,6 +13,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from src.agent import create_agent_graph
+from src.agent.memory import memory_manager, rewrite_query_with_history
 from src.api.tasks import IngestionStatus, get_status, trigger_ingestion
 from src.api.webhook import handle_github_webhook
 from src.config import settings
@@ -163,6 +164,10 @@ class AskRequest(BaseModel):
         default=False,
         description="Route query through LangGraph state machine with non-RAG tools",
     )
+    session_id: Optional[str] = Field(
+        default=None,
+        description="Optional session ID to maintain multi-turn conversational history",
+    )
 
 
 class AskResponse(BaseModel):
@@ -170,6 +175,8 @@ class AskResponse(BaseModel):
     answer: str
     sources: List[SourceCitation]
     latency_ms: float
+    session_id: Optional[str] = None
+    rewritten_question: Optional[str] = None
 
 
 class AgentAskRequest(BaseModel):
@@ -185,6 +192,10 @@ class AgentAskRequest(BaseModel):
         le=15,
         description="Number of context chunks if routed to RAG",
     )
+    session_id: Optional[str] = Field(
+        default=None,
+        description="Optional session ID to maintain multi-turn conversational history",
+    )
 
 
 class AgentAskResponse(BaseModel):
@@ -196,6 +207,8 @@ class AgentAskResponse(BaseModel):
     sources: List[dict]
     steps_taken: List[str]
     latency_ms: float
+    session_id: Optional[str] = None
+    rewritten_question: Optional[str] = None
 
 
 class HealthResponse(BaseModel):
@@ -292,11 +305,17 @@ async def ask_question(request: Request, body: AskRequest):
         )
 
     start_time = time.time()
+    session_id, session_mem = memory_manager.get_or_create(body.session_id)
+    history = session_mem.get_history()
+
+    # Coreference resolution / search query expansion
+    client = generator.client if generator else None
+    search_query = rewrite_query_with_history(body.question, history, client=client)
 
     try:
         if body.use_agent and agent:
             final_state = agent.invoke({
-                "question": body.question,
+                "question": search_query,
                 "top_k": body.top_k,
                 "steps_taken": ["received_query"],
             })
@@ -310,20 +329,27 @@ async def ask_question(request: Request, body: AskRequest):
                 for s in final_state.get("sources", [])
             ]
             latency_ms = round((time.time() - start_time) * 1000, 2)
+            answer_text = final_state.get("answer", "")
+            session_mem.add_turn(body.question, answer_text)
             return AskResponse(
                 question=body.question,
-                answer=final_state.get("answer", ""),
+                answer=answer_text,
                 sources=citations,
                 latency_ms=latency_ms,
+                session_id=session_id,
+                rewritten_question=search_query if search_query != body.question else None,
             )
 
-        result = traced_ask(body.question, body.top_k, retriever, generator)
+        result = traced_ask(search_query, body.top_k, retriever, generator, history=history)
+        session_mem.add_turn(body.question, result["answer"])
 
         return AskResponse(
             question=body.question,
             answer=result["answer"],
             sources=result["sources"],
             latency_ms=result["latency_ms"],
+            session_id=session_id,
+            rewritten_question=search_query if search_query != body.question else None,
         )
     except (AEIAError, APIError, HTTPException):
         raise
@@ -343,6 +369,7 @@ async def ask_question(request: Request, body: AskRequest):
 @limiter.limit(settings.rate_limit)
 async def agent_ask(request: Request, body: AgentAskRequest):
     agent = services.get("agent")
+    generator: Optional[AnswerGenerator] = services.get("generator")
     if not agent:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -350,23 +377,33 @@ async def agent_ask(request: Request, body: AgentAskRequest):
         )
 
     start_time = time.time()
+    session_id, session_mem = memory_manager.get_or_create(body.session_id)
+    history = session_mem.get_history()
+
+    # Coreference resolution / search query expansion
+    client = generator.client if generator else None
+    search_query = rewrite_query_with_history(body.question, history, client=client)
 
     try:
         final_state = agent.invoke({
-            "question": body.question,
+            "question": search_query,
             "top_k": body.top_k,
             "steps_taken": ["received_query"],
         })
         latency_ms = round((time.time() - start_time) * 1000, 2)
+        answer_text = final_state.get("answer", "")
+        session_mem.add_turn(body.question, answer_text)
         return AgentAskResponse(
             question=body.question,
             route=final_state.get("route", "direct_rag"),
             route_reasoning=final_state.get("route_reasoning", ""),
             tool_output=final_state.get("tool_output"),
-            answer=final_state.get("answer", ""),
+            answer=answer_text,
             sources=final_state.get("sources", []),
             steps_taken=final_state.get("steps_taken", []),
             latency_ms=latency_ms,
+            session_id=session_id,
+            rewritten_question=search_query if search_query != body.question else None,
         )
     except (AEIAError, APIError, HTTPException):
         raise
