@@ -1,5 +1,5 @@
 # Technology Stack and Engineering Prerequisites
-## Master the 16 Core Technologies, Libraries, and Concepts Behind AEIA
+## Master the 20 Core Technologies, Libraries, and Concepts Behind AEIA
 
 > This guide provides an exhaustive, practical breakdown of every technology, library, algorithm, and theoretical concept used in the **AEIA** codebase. For each topic, you will learn:
 > 1. **What it is and why AEIA uses it** (including trade-offs and Architectural Decision Records).
@@ -17,42 +17,49 @@ The AEIA system is constructed from five interlocking technological layers:
 ```mermaid
 graph TD
     subgraph "1. Runtime & Package Management"
-        Py["Python 3.12+ (Type Hints, AsyncIO, Dataclasses)"]
+        Py["Python 3.12+ / 3.14 (Type Hints, AsyncIO, Dataclasses)"]
         UV["Astral uv (Deterministic Dependency Management)"]
+        GitSync["Git Sync & Diff Tracker (Automated Corpus Sync)"]
     end
 
     subgraph "2. Ingestion & Retrieval Layer"
-        TS["LangChain Text Splitters (AST & Code Splitting)"]
+        TS_AST["Tree-Sitter AST & Multi-Format Block Parsers"]
+        TS["LangChain Text Splitters (Fallback Splitting)"]
         FE["FastEmbed & ONNX Runtime (BGE-small Embeddings)"]
-        QD["Qdrant Vector Database (Cosine Vector Search)"]
-        BM["Rank-BM25 (Sparse Lexical Keyword Matching)"]
+        QD["Qdrant Vector Database (Deterministic Point IDs)"]
+        BM["Rank-BM25 (Thread-Safe Hot-Reload Index)"]
         RRF["Weighted Reciprocal Rank Fusion (70/30 Hybrid)"]
     end
 
-    subgraph "3. Generation & Reasoning Layer"
-        Gemini["Google GenAI SDK (Gemini 3.6 Flash & 2.5 Flash Lite)"]
+    subgraph "3. Generation & Agentic Memory Layer"
+        Gemini["Google GenAI SDK (Gemini 2.5 Flash & 3.6 Flash)"]
+        Mem["Session Memory Manager (5-Turn Sliding Window)"]
+        Rewrite["Coreference Query Rewriter (Pronoun Resolution)"]
         LG["LangGraph (State Machine Agentic Router)"]
         Tools["Safe Subprocess Tools (Git Log, Git Show, Import Scanner)"]
     end
 
-    subgraph "4. Service, Protocol & Security Layer"
+    subgraph "4. Service, Protocol & UI Layer"
         FA["FastAPI & Uvicorn (ASGI Web Framework)"]
         Pyd["Pydantic V2 & Pydantic Settings"]
         MCP["Model Context Protocol (MCP 2026-07-28 Spec)"]
-        Sec["SlowAPI Rate Limiter & API Key Security"]
+        Sec["SlowAPI Rate Limiter & HMAC-SHA256 Auth"]
+        UI["Interactive Web UI Playground (Marked.js, Highlight.js)"]
     end
 
     subgraph "5. Operations, Tracing & Quality"
         LF["Langfuse (Distributed LLM Observability & Spans)"]
+        Triad["RAG Triad LLM-as-a-Judge (Faithfulness, Relevance, Precision)"]
         Docker["Docker & Compose (Containerized Topology)"]
-        Test["Pytest, AsyncIO & GitHub Actions CI"]
+        Test["Pytest (14 Suites, 72 Passing Tests) & CI"]
     end
 
-    Py --> TS & FE & QD & BM & RRF
-    TS & FE & QD & BM & RRF --> FA
-    Gemini & LG & Tools --> FA
-    FA --> MCP & Sec
+    Py --> TS_AST & FE & QD & BM & RRF
+    TS_AST & FE & QD & BM & RRF --> FA
+    Gemini & Mem & Rewrite & LG & Tools --> FA
+    FA --> MCP & Sec & UI
     FA --> LF
+    Triad --> Gemini
     Docker --> QD & FA
     Test --> FA
 ```
@@ -667,7 +674,7 @@ AEIA runs as an isolated 2-container topology via Docker Compose:
 ## 15. Automated Testing & Continuous Integration (Pytest & GitHub Actions)
 
 ### Why We Use It ([ADR 0011](../decisions/0011-automated-testing-strategy.md))
-To ensure reliability, AEIA maintains 9 automated test suites with 100% pass rates covering every component from chunking to MCP protocols.
+To ensure reliability, AEIA maintains 14 automated test suites with 100% pass rates (72 automated tests) covering every component from chunking to MCP protocols.
 
 ### Core Concepts to Master
 - `pytest.fixture`: Creating reusable client fixtures (`TestClient(app)`).
@@ -680,13 +687,124 @@ To ensure reliability, AEIA maintains 9 automated test suites with 100% pass rat
 
 ---
 
+## 16. Tree-Sitter AST & Multi-Format Syntax Parsing (`tree-sitter`, `tree-sitter-typescript`)
+
+### Why We Use It ([ADR 0023](../decisions/0023-multi-format-syntax-aware-chunking.md))
+Naive character- or token-based splitters routinely bisect function bodies, sever type signatures, and strip leading docstrings. AEIA uses native Tree-Sitter concrete syntax tree (CST) parsing for TypeScript and TSX:
+- **Grammar-Aware Node Extraction**: Targets `function_declaration`, `lexical_declaration` (arrow functions), `class_declaration`, `interface_declaration`, and `type_alias_declaration`.
+- **Leading Comment Binding**: Traverses sibling comment nodes backward from declarations to guarantee JSDoc blocks remain unified with their respective definitions.
+- **Statement Bundling**: Groups top-level declarations and statements exceeding minimum chunk thresholds while enforcing hard upper bounds.
+
+### Code Example from AEIA
+From [`src/ingestion/ast_chunker.py`](../../src/ingestion/ast_chunker.py):
+```python
+class TreeSitterCodeParser:
+    def __init__(self, language: str = "typescript"):
+        self.language = Language(tstypescript.language_typescript())
+        self.parser = Parser(self.language)
+
+    def parse_chunks(self, code: str, file_path: str) -> list[dict]:
+        tree = self.parser.parse(bytes(code, "utf8"))
+        # Traverses root nodes, binds preceding comments, enforces line boundaries
+        ...
+```
+
+### Relevant Codebase Files
+- [`src/ingestion/ast_chunker.py`](../../src/ingestion/ast_chunker.py)
+- [`src/ingestion/chunker.py`](../../src/ingestion/chunker.py)
+- [`tests/test_syntax_chunkers.py`](../../tests/test_syntax_chunkers.py)
+
+---
+
+## 17. Structural Block Grammars (Prisma, YAML, Markdown, SQL)
+
+### Why We Use It ([ADR 0023](../decisions/0023-multi-format-syntax-aware-chunking.md))
+Non-code configuration and data files carry strict grammatical conventions that fail under standard recursive splitters:
+- **`PrismaBlockParser`**: Keeps `model`, `enum`, and `datasource` blocks atomic with all annotations (`@id`, `@relation`) intact.
+- **`YamlBlockParser`**: Slices Docker Compose `services` and GitHub Actions `jobs` along top-level indentation keys, preventing syntax corruption.
+- **`MarkdownSectionParser`**: Extracts heading hierarchies (`#`, `##`, `###`) and injects contextual breadcrumbs (e.g. `[Section: Architecture > Hybrid Search]`) into each chunk header.
+- **`SqlStatementParser`**: Parses DDL migrations into complete statements (`CREATE TABLE`, `ALTER TABLE`) with statement boundaries preserved.
+
+### Relevant Codebase Files
+- [`src/ingestion/block_parsers.py`](../../src/ingestion/block_parsers.py)
+- [`tests/test_syntax_chunkers.py`](../../tests/test_syntax_chunkers.py)
+
+---
+
+## 18. Multi-Turn Conversational Memory & Coreference Query Rewriting
+
+### Why We Use It ([ADR 0025](../decisions/0025-conversational-memory-and-coreference-rewriter.md))
+In real engineering workflows, developers ask conversational follow-up questions referencing previous answers (e.g. *"What does it do?"*, *"Where are its unit tests?"*). Vector search over *"What does it do?"* completely fails.
+- **`SessionMemory` & `SessionMemoryManager`**: Maintains a thread-safe sliding window of 5 conversational turns per session with automatic expiration cleanup.
+- **Coreference Query Rewriting**: Evaluates user queries with fast regex heuristics (<1ms). Standalone questions bypass LLM processing; follow-up questions trigger Gemini to resolve ambiguous pronouns into complete, self-contained search queries.
+
+### Code Example from AEIA
+From [`src/agent/memory.py`](../../src/agent/memory.py):
+```python
+def rewrite_query_with_history(question: str, history: list[Turn], client, model: str) -> str:
+    # Heuristic bypass: if question has no pronouns and is self-contained, return immediately
+    if not has_follow_up_markers(question):
+        return question
+    # LLM coreference resolution
+    response = client.models.generate_content(
+        model=model,
+        contents=[...],
+        config=GenerateContentConfig(temperature=0.0),
+    )
+    return response.text.strip()
+```
+
+### Relevant Codebase Files
+- [`src/agent/memory.py`](../../src/agent/memory.py)
+- [`src/generation/generator.py`](../../src/generation/generator.py)
+- [`src/api/main.py`](../../src/api/main.py)
+- [`tests/test_memory.py`](../../tests/test_memory.py)
+
+---
+
+## 19. Automated RAG Triad Generation Evaluation Suite
+
+### Why We Use It ([ADR 0024](../decisions/0024-rag-triad-generation-evaluation.md))
+Traditional RAG benchmarks only measure retrieval metrics (Recall@K, MRR). They fail to detect LLM hallucinations, incomplete summaries, or irrelevant responses. AEIA implements the complete **RAG Triad** using an impartial LLM-as-a-Judge:
+1. **Faithfulness (Claim-Level Hallucination Detection)**: Breaks generated responses into atomic factual statements and evaluates whether every claim is entailed by retrieved chunks:
+   $$\text{Faithfulness} = \frac{\text{Entailed Claims}}{\text{Total Claims}}, \quad \text{Hallucination Rate} = 1 - \text{Faithfulness}$$
+2. **Answer Relevance**: Rates ($0.0 - 1.0$) how directly and concisely the answer resolves the engineering question.
+3. **Context Precision**: Determines what fraction of retrieved chunks were directly relevant to the synthesis.
+- **Single-Call JSON Optimization**: Assesses all three metrics simultaneously in a single structured JSON response, eliminating 66% of LLM API roundtrips.
+
+### Relevant Codebase Files
+- [`evals/generation_eval.py`](../../evals/generation_eval.py)
+- [`evals/run_eval.py`](../../evals/run_eval.py)
+- [`evals/generation_benchmark.json`](../../evals/generation_benchmark.json)
+- [`tests/test_generation_eval.py`](../../tests/test_generation_eval.py)
+
+---
+
+## 20. Interactive Web UI Playground & Visual Citation Inspector
+
+### Why We Use It ([ADR 0022](../decisions/0022-interactive-web-playground-ui.md))
+A high-throughput API benefits from an immediate, zero-friction graphical playground for manual inspection, debugging, and live demonstrations:
+- **Zero-Build Single-Page Application**: Served directly from FastAPI at `src/api/static/index.html` via Tailwind CSS, Marked.js, and Highlight.js (no Node.js build step required).
+- **Slide-Over Citation Inspector**: Clicking markdown citations (`[src/auth/jwt.ts#L1-L35]`) opens an interactive slide-over drawer rendering the exact source lines with syntax highlighting.
+- **Real-Time Telemetry & Session Management**: Displays retrieval scores, processing latencies, step audits, and provides instant "New Chat" session resets.
+- **Content Negotiation**: Human browsers requesting `GET /` receive the interactive UI, while API clients receive standard JSON service health payloads.
+
+### Relevant Codebase Files
+- [`src/api/static/index.html`](../../src/api/static/index.html)
+- [`src/api/main.py`](../../src/api/main.py#L90-L105)
+- [`tests/test_ui.py`](../../tests/test_ui.py)
+
+---
+
 ## Summary Checklist: What to Master Before Contributing
 
 Before modifying AEIA, make sure you have:
 1. [ ] Built a mini script using `fastembed` and `qdrant-client` on local text.
 2. [ ] Implemented Reciprocal Rank Fusion (RRF) from scratch on two ranked lists.
-3. [ ] Written a FastAPI endpoint protected by header authentication and `slowapi` rate limiting.
-4. [ ] Compiled a simple LangGraph `StateGraph` with a conditional router edge.
-5. [ ] Run `uv run pytest -v` locally and seen all 9 test suites pass.
+3. [ ] Written a FastAPI endpoint protected by header authentication, `slowapi` rate limiting, and HMAC webhook verification.
+4. [ ] Compiled a LangGraph `StateGraph` with conditional routing and multi-turn session memory.
+5. [ ] Inspected Tree-Sitter AST node trees for TypeScript code blocks and verified leading comment binding.
+6. [ ] Executed `PYTHONPATH=. uv run python evals/run_eval.py --generation` to evaluate retrieval and the RAG Triad.
+7. [ ] Run `uv run pytest -v` locally and verified all 14 test suites (72 tests) pass cleanly.
 
-Proceed to **[02 — Architecture, Design & Patterns](02-architecture-design-and-patterns.md)** to learn how these 16 technologies are structured into AEIA's complete software architecture.
+Proceed to **[02 — Architecture, Design & Patterns](02-architecture-design-and-patterns.md)** to learn how these 20 technologies are structured into AEIA's complete software architecture.

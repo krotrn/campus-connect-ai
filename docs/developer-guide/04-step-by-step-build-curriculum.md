@@ -1,5 +1,5 @@
 # Step-by-Step Implementation Curriculum
-## Build the Complete AEIA Intelligence System from Scratch in 14 Days
+## Build the Complete AEIA Intelligence System from Scratch in 18 Days
 
 > **Overview**: This curriculum provides an actionable, day-by-day implementation roadmap. If you were handed an empty directory today, this guide walks you through building every subsystem of AEIA in chronological sequence.
 > 
@@ -53,11 +53,18 @@ flowchart TD
         D13["Day 13: Official MCP Server (2026-07-28 Spec)"]
     end
 
-    subgraph "Phase 9: Quality & CI/CD (Day 14+)"
+    subgraph "Phase 9: Quality & CI/CD (Day 14)"
         D14["Day 14: Golden Benchmark, Pytest & GitHub CI"]
     end
 
-    D1 --> D2 --> D3 --> D4 --> D5 --> D6 --> D7 --> D8 --> D9 --> D10 --> D11 --> D12 --> D13 --> D14
+    subgraph "Phase 10: Advanced Capabilities & Live Sync (Days 15-18)"
+        D15["Day 15: Git Sync & HMAC-SHA256 Webhook"]
+        D16["Day 16: Web UI Playground & Citation Inspector"]
+        D17["Day 17: Tree-Sitter AST & Block Grammars"]
+        D18["Day 18: RAG Triad Evals & Conversational Memory"]
+    end
+
+    D1 --> D2 --> D3 --> D4 --> D5 --> D6 --> D7 --> D8 --> D9 --> D10 --> D11 --> D12 --> D13 --> D14 --> D15 --> D16 --> D17 --> D18
 ```
 
 ---
@@ -332,7 +339,7 @@ flowchart TD
 
 ---
 
-## Phase 9: Evaluation, Testing & CI/CD (Day 14+)
+## Phase 9: Evaluation, Testing & CI/CD (Day 14)
 
 ### Day 14: Golden Benchmark Evaluation & GitHub CI
 - **Objective**: Measure retrieval accuracy against the 20 golden queries and automate testing in GitHub Actions.
@@ -349,6 +356,55 @@ flowchart TD
   ```
   Confirms Recall@5 $\ge$ 85.0%, Recall@10 $\ge$ 95.0%, MRR $\ge$ 0.588.
 - **Codebase Reference**: [`../../evals/run_eval.py`](../../evals/run_eval.py), [`../../.github/workflows/ci.yml`](../../.github/workflows/ci.yml).
+
+---
+
+## Phase 10: Advanced Capabilities & Live Synchronicity (Days 15–18)
+
+### Day 15: Git Synchronization, Incremental Delta Ingestion & HMAC Webhooks
+- **Objective**: Synchronize remote code changes automatically without expensive full-database re-embeddings.
+- **Action Steps**:
+  1. Build [`src/ingestion/git_sync.py`](../../src/ingestion/git_sync.py) to fetch, track commit SHAs, and extract added/modified/deleted files via `git diff --name-status`.
+  2. Implement deterministic UUIDv5 Qdrant Point IDs derived from `(rel_path, chunk_index)` and hot-reload the BM25 index with `threading.RLock` ([ADR 0018](../decisions/0018-bm25-thread-safe-hot-reload.md)–[ADR 0020](../decisions/0020-incremental-delta-only-ingestion.md)).
+  3. Create [`src/api/webhook.py`](../../src/api/webhook.py) with `POST /webhook/github` verifying `X-Hub-Signature-256` via constant-time `hmac.compare_digest` ([ADR 0021](../decisions/0021-github-push-webhook-automation.md)).
+- **Verification Milestone**:
+  ```bash
+  uv run pytest tests/test_incremental_ingestion.py -v
+  ```
+
+### Day 16: Interactive Web UI Playground & Visual Citation Inspector
+- **Objective**: Build a zero-setup, single-page application for developers to test queries and inspect cited code directly in their browser.
+- **Action Steps**:
+  1. Create [`src/api/static/index.html`](../../src/api/static/index.html) with Tailwind CSS, Marked.js, and Highlight.js.
+  2. Implement mode switching (Direct RAG vs. Agent), interactive slide-over citation drawer for `[filepath#Lstart-Lend]`, and real-time telemetry cards ([ADR 0022](../decisions/0022-interactive-web-playground-ui.md)).
+  3. Implement content negotiation in [`src/api/main.py`](../../src/api/main.py) to serve HTML to browsers and JSON to programmatic clients on `GET /`.
+- **Verification Milestone**:
+  ```bash
+  uv run pytest tests/test_ui.py -v
+  ```
+
+### Day 17: Multi-Format AST Parsing & Structural Block Grammars
+- **Objective**: Parse code and configs along true syntax boundaries using Tree-Sitter and block grammars.
+- **Action Steps**:
+  1. Build [`src/ingestion/ast_chunker.py`](../../src/ingestion/ast_chunker.py) using `tree-sitter` and `tree-sitter-typescript` to extract TypeScript/TSX functions, classes, interfaces, and bind preceding JSDocs ([ADR 0023](../decisions/0023-multi-format-syntax-aware-chunking.md)).
+  2. Build [`src/ingestion/block_parsers.py`](../../src/ingestion/block_parsers.py) to extract atomic Prisma models, Docker Compose services, Markdown heading hierarchies, and SQL DDL statements.
+  3. Integrate into `CodeAwareChunker` as the primary parsing engine.
+- **Verification Milestone**:
+  ```bash
+  uv run pytest tests/test_syntax_chunkers.py -v
+  ```
+
+### Day 18: Automated RAG Triad Evals & Multi-Turn Conversational Memory
+- **Objective**: Implement claim-level generation evaluation and multi-turn conversational chat with coreference resolution.
+- **Action Steps**:
+  1. Build [`evals/generation_eval.py`](../../evals/generation_eval.py) evaluating Faithfulness, Answer Relevance, and Context Precision in a single structured JSON judge call ([ADR 0024](../decisions/0024-rag-triad-generation-evaluation.md)).
+  2. Build [`src/agent/memory.py`](../../src/agent/memory.py) with `SessionMemoryManager` (5-turn sliding window) and `rewrite_query_with_history` (heuristic bypass + Gemini coreference rewriter) ([ADR 0025](../decisions/0025-conversational-memory-and-coreference-rewriter.md)).
+  3. Wire session tracking through `/ask`, `/agent/ask`, and the Web UI Playground.
+- **Verification Milestone**:
+  ```bash
+  uv run pytest tests/test_generation_eval.py tests/test_memory.py -v
+  PYTHONPATH=. uv run python evals/run_eval.py --generation
+  ```
 
 ---
 

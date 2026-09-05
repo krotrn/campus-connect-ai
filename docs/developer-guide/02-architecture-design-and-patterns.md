@@ -81,13 +81,13 @@ flowchart TB
 
 ---
 
-## 2. The 7 Evolutionary Versions (V1 – V7)
+## 2. The 15 Evolutionary Versions (V1 – V15)
 
-AEIA did not begin as a monolithic system. It evolved incrementally through 7 distinct versions, where each version addressed specific empirical bottlenecks, evaluation failures, or operational requirements.
+AEIA did not begin as a monolithic system. It evolved incrementally through 15 distinct versions, where each version addressed specific empirical bottlenecks, evaluation failures, or operational requirements.
 
 ```mermaid
 timeline
-    title The 7 Evolutionary Versions of AEIA
+    title The 15 Evolutionary Versions of AEIA
     V1 Baseline (2026-09-02) : Pure Dense Vector RAG : BGE-small + Qdrant + Gemini : Recall@5 70%, MRR 0.638
     V2 Hybrid & Prefix (2026-09-04) : BM25 + Weighted RRF (70/30) : Semantic Prefix Injection : Recall@5 85%, Recall@10 95%
     V3 Production Hardening (2026-09-04) : API Key Auth : SlowAPI Rate Limiting : Background Ingestion : GitHub Actions CI
@@ -95,6 +95,14 @@ timeline
     V5 Agentic Layer (2026-09-04) : LangGraph State Machine : Fast Regex + LLM Router : Safe Git & Import Tools
     V6 Model Context Protocol (2026-09-05) : Official MCP Server (2026-07-28 Spec) : Stateless HTTP & Stdio : 5 Granular Tools
     V7 Error Resilience (2026-09-05) : Centralized Exception Hierarchy : Candidate Model Fallback : Graceful 429 Degradation
+    V8 BM25 Hot-Reload (2026-09-05) : In-Memory RLock : Lock-Free Atomic Swap : Sub-millisecond Read Contention
+    V9 Git Synchronization (2026-09-05) : Automated git diff Tracking : Commit Hash Checkpoints : Headless Shell Runner
+    V10 Incremental Delta Ingestion (2026-09-05) : Deterministic Point IDs : Delta-Only Upsert : Instant File Deletions
+    V11 Push Webhook Automation (2026-09-05) : GitHub HMAC-SHA256 Auth : Branch Filtering : Constant-Time Comparison
+    V12 Web Playground UI (2026-09-05) : Single-Page Reactive App : Slide-Over Code Inspector : Content Negotiation
+    V13 Multi-Format Syntax Chunking (2026-09-05) : Tree-Sitter TS/TSX AST : Prisma & YAML Block Parsers : SQL DDL & Markdown
+    V14 RAG Triad Evaluation Suite (2026-09-05) : Claim Hallucination Detection : Relevance & Context Precision : Single-Call JSON
+    V15 Conversational Memory (2026-09-05) : Thread-Safe Sliding Window : Coreference Query Rewriter : Multi-Turn Session Reset
 ```
 
 ### V1 — Baseline Dense Vector RAG ([ADR 0001](../decisions/0001-target-corpus.md)–[ADR 0011](../decisions/0011-automated-testing-strategy.md))
@@ -168,6 +176,61 @@ timeline
   - Typed domain exception hierarchy: `AEIAError`, `LLMQuotaExceededError`, `LLMServiceUnavailableError`, `VectorDBUnavailableError`, `CorpusUnavailableError`.
   - Upstream Google API handlers mapping `RESOURCE_EXHAUSTED` to HTTP 429 and network failures to HTTP 503.
   - **Graceful Context Fallback**: When Gemini quota is exhausted, `AnswerGenerator` falls back to returning the retrieved, grounded code chunks directly to the user rather than failing.
+
+### V8 — Thread-Safe BM25 In-Memory Index Hot-Reload ([ADR 0018](../decisions/0018-bm25-thread-safe-hot-reload.md))
+- **Objective**: Allow real-time index reloads after background re-ingestion without blocking concurrent search queries or throwing race condition errors.
+- **Implementation**:
+  - Implemented `threading.RLock` guard in `Retriever`.
+  - Employs an atomic pointer swap: builds the new BM25 corpus and index in a detached local variable before acquiring the write lock for a sub-microsecond reference swap.
+
+### V9 — Automated Git Corpus Sync & Diff Tracking ([ADR 0019](../decisions/0019-git-corpus-sync-and-diff-tracking.md))
+- **Objective**: Keep the indexed knowledge base perfectly synchronized with remote git repositories without manual intervention.
+- **Implementation**:
+  - `src/ingestion/git_sync.py` performs safe fetch/pull operations and calculates modified, added, and deleted files using `git diff --name-status`.
+  - Checkpoints commit SHA states in `.cache/last_synced_commit.txt`.
+
+### V10 — Incremental Delta-Only Ingestion with Deterministic Point IDs ([ADR 0020](../decisions/0020-incremental-delta-only-ingestion.md))
+- **Objective**: Eliminate expensive full-corpus re-embedding on every change by processing only modified or deleted files.
+- **Implementation**:
+  - Deterministic Qdrant Point IDs generated via UUIDv5 derived from `(rel_path, chunk_index)`.
+  - When files are deleted or modified, points belonging to obsolete chunk indices are purged via Qdrant payload filters before new chunks are upserted.
+
+### V11 — GitHub Push Webhook Automation ([ADR 0021](../decisions/0021-github-push-webhook-automation.md))
+- **Objective**: Automatically trigger incremental ingestion whenever code is pushed to GitHub.
+- **Implementation**:
+  - Endpoint `POST /webhook/github` verifies `X-Hub-Signature-256` using constant-time `hmac.compare_digest`.
+  - Filters events by target branch (e.g., `main`), rejecting out-of-scope branch pushes immediately with HTTP 200/202.
+
+### V12 — Interactive Web UI Playground & Visual Citation Inspector ([ADR 0022](../decisions/0022-interactive-web-playground-ui.md))
+- **Objective**: Deliver a zero-setup, graphical user interface for developers and evaluators to interact with AEIA without relying on curl or Swagger.
+- **Implementation**:
+  - Reactive single-page application at `src/api/static/index.html` (Tailwind CSS, Marked.js, Highlight.js).
+  - Mode toggle between Direct RAG and Agent workflows.
+  - Slide-over drawer rendering the exact cited source code lines when citations are clicked.
+  - Content negotiation on `GET /` delivering HTML to browsers and JSON to API clients.
+
+### V13 — Multi-Format Syntax-Aware Chunking ([ADR 0023](../decisions/0023-multi-format-syntax-aware-chunking.md))
+- **Objective**: Replace coarse text splitters with parser-guided syntax boundaries across all file formats in modern full-stack repositories.
+- **Implementation**:
+  - `TreeSitterCodeParser`: Concrete syntax tree extraction for TypeScript and TSX, keeping functions, classes, interfaces, and leading JSDocs intact.
+  - `PrismaBlockParser`: Atomic schema `model` and `enum` block extraction.
+  - `YamlBlockParser`: Top-level indentation-preserving block extraction for Docker Compose services and GitHub Actions jobs.
+  - `MarkdownSectionParser`: Breadcrumb hierarchy injection (`# Level 1 > ## Level 2`).
+  - `SqlStatementParser`: Complete DDL statement isolation.
+
+### V14 — Automated RAG Triad Generation Evaluation Suite ([ADR 0024](../decisions/0024-rag-triad-generation-evaluation.md))
+- **Objective**: Quantify generation fidelity, hallucination rates, and answer relevancy using an impartial LLM judge.
+- **Implementation**:
+  - `evals/generation_eval.py` assesses Faithfulness (claim entailment), Answer Relevance, and Context Precision.
+  - Employs a single structured JSON judge call to reduce LLM API roundtrips by 66%.
+  - Integrates directly with `evals/run_eval.py --generation`.
+
+### V15 — Multi-Turn Conversational Memory & Coreference Rewriter ([ADR 0025](../decisions/0025-conversational-memory-and-coreference-rewriter.md))
+- **Objective**: Allow developers to have flowing multi-turn conversations where follow-up queries implicitly reference previous answers.
+- **Implementation**:
+  - `src/agent/memory.py`: Thread-safe sliding window session registry (`SessionMemoryManager`).
+  - `rewrite_query_with_history`: Fast regex heuristic bypass for standalone queries (<1ms) and Gemini-powered pronoun resolution for follow-ups (e.g. "what does it do?").
+  - Full-stack threading through `/ask`, `/agent/ask`, and the Web UI Playground.
 
 ---
 
@@ -267,19 +330,50 @@ graph TD
     style Content fill:#f8fafc,stroke:#64748b,stroke-width:1px
 ```
 
+### Pattern 6: AST Node Bundling & Leading Comment Preservation
+*File: [`src/ingestion/ast_chunker.py`](../../src/ingestion/ast_chunker.py)*
+
+**Problem**: Naive text or token splitters slice through function declarations, drop preceding JSDoc comments, and isolate export statements from their definitions.
+
+**Solution**: Native Tree-Sitter concrete syntax tree (CST) parsing extracts semantic declarations (`function_declaration`, `class_declaration`, `interface_declaration`). When capturing an AST node, the parser scans previous sibling nodes backward for `comment` tokens, binding documentation directly with the declaration. Statements are bundled until reaching a target chunk size without splitting code blocks.
+
+### Pattern 7: Single-Call RAG Triad Judge Pattern
+*File: [`evals/generation_eval.py`](../../evals/generation_eval.py)*
+
+**Problem**: Evaluating generation quality across Faithfulness, Relevance, and Context Precision traditionally requires 3 separate LLM calls per query, exhausting API quotas (e.g. 60 LLM calls for a 20-query benchmark).
+
+**Solution**: Combine the entire RAG Triad evaluation into a single structured JSON schema prompt. The judge returns atomic claims, entailment judgements, relevance score, and precision score in one roundtrip—reducing latency and token consumption by 66%.
+
+### Pattern 8: Sliding-Window Session Memory with Fast Coreference Rewriter
+*File: [`src/agent/memory.py`](../../src/agent/memory.py)*
+
+**Problem**: Follow-up questions like *"What does it do?"* or *"Show me its unit tests"* lack sufficient nouns for vector retrieval. However, sending every query to an LLM rewriter adds unacceptable latency (400ms+) on standalone queries.
+
+**Solution**: A two-stage pipeline:
+1. **Heuristic Evaluation**: Fast regex scans for pronouns (`it`, `this`, `that`, `they`) and follow-up markers (`what about`, `how does that`). If absent, the query is immediately passed to retrieval with zero latency overhead.
+2. **LLM Coreference Resolution**: If follow-up markers are present, Gemini rewrites the question using the last 5 turns of conversation history into a fully self-contained retrieval query.
+
+### Pattern 9: Client-Negotiated Content Delivery (Dual HTML/JSON Gateway)
+*File: [`src/api/main.py`](../../src/api/main.py#L90-L105)*
+
+**Problem**: Providing a web playground typically requires a separate frontend server, CORS configuration, and dedicated deployment infrastructure.
+
+**Solution**: FastAPI inspects the HTTP `Accept` header on `GET /`. If a human browser visits the root URL (`Accept: text/html`), it redirects to `/ui` serving the interactive playground. If an automated script or monitoring tool visits (`Accept: application/json`), it returns the JSON service health status.
+
 ---
 
 ## 4. End-to-End Data Flow Walkthroughs
 
 ### Flow A: Ingestion Pipeline Data Flow
-Executed via `PYTHONPATH=. uv run python -m src.ingestion.pipeline` or `POST /ingest`:
+Executed via `PYTHONPATH=. uv run python -m src.ingestion.pipeline`, `POST /ingest`, or `POST /webhook/github`:
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Dev as Developer / Background Task
+    actor Dev as Developer / Webhook
     participant Pipe as IngestionPipeline
     participant Chunker as CodeAwareChunker
+    participant AST as Tree-Sitter & Block Parsers
     participant Cache as EmbeddingCache
     participant Model as FastEmbed (BGE-small)
     participant Qdrant as Qdrant Vector DB
@@ -289,9 +383,14 @@ sequenceDiagram
     Pipe->>Pipe: scan_files(corpus_path)
     loop Every File
         Pipe->>Chunker: chunk_file(file_path, rel_path)
+        alt TypeScript / TSX
+            Chunker->>AST: parse_typescript(code) -> TreeSitter AST
+        else Prisma / YAML / SQL / Markdown
+            Chunker->>AST: parse_structural_blocks(code)
+        else Generic Code
+            Chunker->>Chunker: language_splitter.split_text()
+        end
         Chunker->>Chunker: _build_semantic_prefix()
-        Chunker->>Chunker: language_splitter.split_text()
-        Chunker->>Chunker: _find_line_number() (1-indexed)
         Chunker-->>Pipe: List[CodeChunk]
     end
     loop Ingestion Batches (128 Chunks)
@@ -303,10 +402,10 @@ sequenceDiagram
             Model-->>Pipe: new_embeddings
             Pipe->>Cache: put(hash, new_embedding)
         end
-        Pipe->>Qdrant: upsert(points=[PointStruct(...)])
+        Pipe->>Qdrant: upsert(points=[PointStruct(id=UUIDv5, vector, payload)])
     end
     Pipe->>Cache: save() (.cache/embedding_cache.json)
-    Pipe-->>Dev: Ingestion Complete Summary
+    Pipe-->>Dev: Ingestion Complete Summary (Hot-Reload BM25)
 ```
 
 ---
@@ -316,25 +415,28 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Client as Client / Browser
+    actor Client as Client / Web UI
     participant API as FastAPI (POST /ask)
+    participant Mem as SessionMemoryManager
     participant Trace as Langfuse Observability
     participant Ret as Hybrid Retriever
     participant Gen as AnswerGenerator
     participant Gemini as Google Gemini API
 
-    Client->>API: POST /ask {question, top_k} + Header: X-API-Key
+    Client->>API: POST /ask {question, session_id, top_k} + Header: X-API-Key
     API->>API: verify_api_key() & rate_limiter.check()
-    API->>Trace: traced_ask(question, top_k)
+    API->>Mem: rewrite_query_with_history(question, session_id)
+    Mem-->>API: resolved_query (e.g. "What does Redis rate limiter do?")
+    API->>Trace: traced_ask(resolved_query, top_k, history)
     
     rect rgb(240, 248, 255)
         Note over Trace,Ret: Retrieval Span
-        Trace->>Ret: retrieve(question, top_k)
+        Trace->>Ret: retrieve(resolved_query, top_k)
         par Dense Vector Search
-            Ret->>Ret: embed(question) -> vector
+            Ret->>Ret: embed(resolved_query) -> vector
             Ret->>Ret: Qdrant.query_points(vector, limit=20)
         and Sparse BM25 Search
-            Ret->>Ret: _tokenize(question)
+            Ret->>Ret: _tokenize(resolved_query)
             Ret->>Ret: BM25Okapi.get_scores(tokens)
         end
         Ret->>Ret: _reciprocal_rank_fusion(dense, sparse, weights=70/30)
@@ -343,15 +445,16 @@ sequenceDiagram
 
     rect rgb(255, 245, 240)
         Note over Trace,Gen: Generation Span
-        Trace->>Gen: generate(question, chunks)
+        Trace->>Gen: generate(resolved_query, chunks, history)
         Gen->>Gen: _build_context_block(chunks)
-        Gen->>Gemini: generate_content(prompt, system_instruction, temp=0.1)
+        Gen->>Gemini: generate_content(prompt + history, system_instruction, temp=0.1)
         Gemini-->>Gen: response.text (with [filepath#Lstart-Lend])
         Gen-->>Trace: AnswerResponse
     end
 
     Trace-->>API: {answer, sources, latency_ms}
-    API-->>Client: HTTP 200 OK
+    API->>Mem: add_turn(session_id, question, answer)
+    API-->>Client: HTTP 200 OK {answer, sources, session_id, rewritten_question}
 ```
 
 ---
@@ -361,17 +464,20 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Client as Client
+    actor Client as Client / Web UI
     participant API as FastAPI (/agent/ask)
+    participant Mem as SessionMemoryManager
     participant Graph as LangGraph StateGraph
     participant Router as Router Node
     participant Tool as Tool / RAG Branch
     participant Synth as Synthesizer Node
 
-    Client->>API: POST /agent/ask {question: "What changed in commit 6e19f61?"}
-    API->>Graph: invoke({"question": ..., "steps_taken": []})
+    Client->>API: POST /agent/ask {question, session_id}
+    API->>Mem: rewrite_query_with_history(question, session_id)
+    Mem-->>API: resolved_query
+    API->>Graph: invoke({"question": resolved_query, "history": ..., "steps_taken": []})
     Graph->>Router: router_node(state)
-    Router->>Router: classify_route_fast(question) -> "git_commit", target="6e19f61"
+    Router->>Router: classify_route_fast(resolved_query) -> "git_commit", target="6e19f61"
     Router-->>Graph: {route: "git_commit", target: "6e19f61"}
     
     Graph->>Tool: git_commit_node(state)
@@ -382,7 +488,9 @@ sequenceDiagram
     Synth->>Synth: format answer with tool_output & citation
     Synth-->>Graph: {answer: ..., sources: [...]}
     Graph-->>API: final_state
-    API-->>Client: HTTP 200 OK {route, tool_output, answer, sources, steps_taken}
+    API->>Mem: add_turn(session_id, question, answer)
+    API-->>Client: HTTP 200 OK {route, answer, sources, session_id, rewritten_question, steps_taken}
+```
 ```
 
 ---

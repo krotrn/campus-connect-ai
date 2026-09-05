@@ -14,7 +14,7 @@
 
 ```mermaid
 mindmap
-  root((AEIA Repository<br/>59 Files))
+  root((AEIA Repository<br/>82 Files))
     Root & Infrastructure
       pyproject.toml, uv.lock
       .python-version, .gitignore, .env
@@ -24,19 +24,21 @@ mindmap
       .github/workflows/ci.yml
     Core Source src/
       config.py, errors.py
-      ingestion/ (chunker, pipeline)
+      ingestion/ (chunker, ast_chunker, block_parsers, pipeline, git_sync)
       retrieval/ (retriever)
       generation/ (generator)
       observability/ (__init__)
-      agent/ (state, tools, router, graph)
-      mcp/ (server)
-      api/ (main, tasks)
+      agent/ (state, tools, router, graph, memory)
+      mcp/ (server, __init__)
+      api/ (main, tasks, webhook, static/index.html)
     Evaluation Suite evals/
-      dataset.json, run_eval.py
+      dataset.json, run_eval.py, generation_eval.py, generation_benchmark.json
     Automated Test Suite tests/
-      9 Test Suites (unit, api, agent, mcp, error)
+      14 Test Suites (72 passing tests)
     ADRs docs/decisions/
-      README.md & 17 Decision Records
+      README.md & 25 Decision Records
+    Developer Guide docs/developer-guide/
+      README.md & 5 Modular Manuals
     Postmortems & Data
       postmortems/001
       corpus/campus-connect
