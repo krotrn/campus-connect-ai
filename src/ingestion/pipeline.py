@@ -14,6 +14,7 @@ from qdrant_client.models import (
     PointStruct,
     VectorParams,
 )
+from tqdm import tqdm
 
 from src.config import settings
 from src.ingestion.chunker import CodeAwareChunker, CodeChunk
@@ -187,20 +188,21 @@ class IngestionPipeline:
         texts = [t[1] for t in to_embed]
         total_batches = (len(texts) + BATCH_SIZE - 1) // BATCH_SIZE
 
-        for b_idx in range(total_batches):
-            batch_texts = texts[b_idx * BATCH_SIZE : (b_idx + 1) * BATCH_SIZE]
-            batch_embeddings = list(self.embedding_model.embed(batch_texts))
+        with tqdm(total=len(to_embed), desc="Computing embeddings", unit="chunk") as pbar:
+            for b_idx in range(total_batches):
+                batch_texts = texts[b_idx * BATCH_SIZE : (b_idx + 1) * BATCH_SIZE]
+                batch_embeddings = list(self.embedding_model.embed(batch_texts))
 
-            for j, emb in enumerate(batch_embeddings):
-                global_j = b_idx * BATCH_SIZE + j
-                orig_idx = to_embed[global_j][0]
-                content = to_embed[global_j][1]
-                emb_list = emb.tolist()
+                for j, emb in enumerate(batch_embeddings):
+                    global_j = b_idx * BATCH_SIZE + j
+                    orig_idx = to_embed[global_j][0]
+                    content = to_embed[global_j][1]
+                    emb_list = emb.tolist()
 
-                embeddings[orig_idx] = emb_list
-                self.cache.put(content, emb_list)
+                    embeddings[orig_idx] = emb_list
+                    self.cache.put(content, emb_list)
 
-            print(f"   Embedded batch {b_idx + 1}/{total_batches} ({len(batch_texts)} chunks)")
+                pbar.update(len(batch_texts))
 
         return embeddings  # type: ignore
 
@@ -236,33 +238,34 @@ class IngestionPipeline:
     def _upsert_chunks(self, chunks: List[CodeChunk], embeddings: List[List[float]]):
         """Upsert chunks with deterministic point IDs."""
         total_batches = (len(chunks) + BATCH_SIZE - 1) // BATCH_SIZE
-        for b_idx in range(total_batches):
-            batch_start = b_idx * BATCH_SIZE
-            batch_end = min(batch_start + BATCH_SIZE, len(chunks))
-            batch_chunks = chunks[batch_start:batch_end]
-            batch_embeddings = embeddings[batch_start:batch_end]
+        with tqdm(total=len(chunks), desc="Uploading to Qdrant", unit="chunk") as pbar:
+            for b_idx in range(total_batches):
+                batch_start = b_idx * BATCH_SIZE
+                batch_end = min(batch_start + BATCH_SIZE, len(chunks))
+                batch_chunks = chunks[batch_start:batch_end]
+                batch_embeddings = embeddings[batch_start:batch_end]
 
-            points = []
-            for chunk, emb in zip(batch_chunks, batch_embeddings):
-                points.append(
-                    PointStruct(
-                        id=_point_id(chunk.file_path, chunk.chunk_index),
-                        vector=emb,
-                        payload={
-                            "content": chunk.content,
-                            "file_path": chunk.file_path,
-                            "start_line": chunk.start_line,
-                            "end_line": chunk.end_line,
-                            "file_type": chunk.file_type,
-                            "chunk_index": chunk.chunk_index,
-                        },
+                points = []
+                for chunk, emb in zip(batch_chunks, batch_embeddings):
+                    points.append(
+                        PointStruct(
+                            id=_point_id(chunk.file_path, chunk.chunk_index),
+                            vector=emb,
+                            payload={
+                                "content": chunk.content,
+                                "file_path": chunk.file_path,
+                                "start_line": chunk.start_line,
+                                "end_line": chunk.end_line,
+                                "file_type": chunk.file_type,
+                                "chunk_index": chunk.chunk_index,
+                            },
+                        )
                     )
+                self.client.upsert(
+                    collection_name=settings.collection_name,
+                    points=points,
                 )
-            self.client.upsert(
-                collection_name=settings.collection_name,
-                points=points,
-            )
-            print(f"   Upserted batch {b_idx + 1}/{total_batches} ({len(points)} points)")
+                pbar.update(len(points))
 
     # ─────────────────────────────────────────────────────────────────────────
     # Full (re)ingestion
@@ -280,7 +283,7 @@ class IngestionPipeline:
         print(f"Found {len(files)} files to ingest from {corpus_path}")
 
         all_chunks: List[CodeChunk] = []
-        for file_path in files:
+        for file_path in tqdm(files, desc="Parsing files", unit="file"):
             rel_path = str(file_path.relative_to(corpus_path))
             chunks = self.chunker.chunk_file(file_path, rel_path)
             all_chunks.extend(chunks)

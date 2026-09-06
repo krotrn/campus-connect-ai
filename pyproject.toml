@@ -22,6 +22,7 @@ dependencies = [
     "slowapi>=0.1.9",
     "tree-sitter>=0.26.0",
     "tree-sitter-typescript>=0.23.2",
+    "tqdm>=4.66.0",
     "uvicorn[standard]>=0.52.4",
 ]
 
