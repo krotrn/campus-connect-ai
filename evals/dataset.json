@@ -65,7 +65,8 @@
     "expected_sources": [
       "ARCHITECTURE.md",
       "compose.yml",
-      "compose.dev.yml"
+      "compose.dev.yml",
+      "src/lib/redis.ts"
     ],
     "expected_answer_summary": "Redis is used for caching, session management, and BullMQ background task workers."
   },
@@ -173,7 +174,8 @@
     "expected_sources": [
       "compose.dev.yml",
       "compose.yml",
-      "ARCHITECTURE.md"
+      "ARCHITECTURE.md",
+      "src/services/file-upload/file-upload.service.ts"
     ],
     "expected_answer_summary": "MinIO is used for S3-compatible local object storage."
   },

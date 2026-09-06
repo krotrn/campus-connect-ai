@@ -122,18 +122,18 @@ timeline
   1. Dense embeddings failed to retrieve exact variable names or database table definitions when wording differed slightly.
   2. Configuration files (`compose.yml`, SQL migrations, `.env.example`) were treated as semantically opaque by the embedding model.
 
-### V2 — Hybrid Retrieval & Semantic Prefixing ([ADR 0012](../decisions/0012-v2-hybrid-retrieval-and-semantic-prefixing.md))
+### V2 — Hybrid Retrieval & Semantic Prefixing ([ADR 0012](../decisions/0012-v2-hybrid-retrieval-and-semantic-prefixing.md), updated by [ADR 0027](../decisions/0027-file-aware-hybrid-retrieval-ranking.md))
 - **Objective**: Overcome dense vector blind spots and elevate retrieval recall above 90%.
 - **Empirical Experiments & Findings**:
   1. **Cross-Encoder Reranking Test**: We tested integrating `FlashRank` with `ms-marco-MiniLM-L-12-v2`. Reranking degraded performance across the board (Recall@10 dropped from 85% to 80%, MRR dropped from 0.638 to 0.455, and latency exploded from 43ms to 1453ms). *Lesson: Web-trained cross-encoders actively downrank source code.*
   2. **Equal-Weight Hybrid RRF**: Dense + BM25 with equal 50/50 RRF weight improved Recall@5 to 75%, but dropped MRR to 0.464 because noisy BM25 keyword hits demoted high-confidence dense hits.
   3. **Weighted RRF (70/30)**: Allocating 0.7 weight to dense search and 0.3 to BM25 balanced keyword precision with semantic depth.
   4. **Semantic Prefix Enrichment**: Prepending natural-language preambles to `compose.yml`, SQL migrations, and `.env` files resolved the semantic opacity gap.
-- **V2 Final Benchmark Results**:
-  - **Recall@5**: **85.0%** (+15% improvement over V1)
-  - **Recall@10**: **95.0%** (+10% improvement over V1)
-  - **MRR**: **0.588**
-  - **Search Latency**: **45ms** (retaining sub-50ms speed without expensive rerankers)
+- **Current benchmark results after file-aware ranking**:
+  - **Recall@5**: **100.0%** (20/20)
+  - **Recall@10**: **100.0%** (20/20)
+  - **MRR**: **0.7917**
+  - **Search Latency**: **46.34ms**
 
 ### V3 — Production Hardening ([ADR 0013](../decisions/0013-v3-production-hardening.md))
 - **Objective**: Transition from a local research prototype to a hardened, authenticated service.

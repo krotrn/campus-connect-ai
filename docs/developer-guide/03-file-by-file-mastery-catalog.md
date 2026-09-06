@@ -347,14 +347,13 @@ mindmap
 ### 4.1 `evals/dataset.json`
 - **Relative Path**: [`../../evals/dataset.json`](../../evals/dataset.json)
 - **Role**: 20 golden test cases with human-verified ground-truth expected source files.
-- **Anatomy**: Categorized across 7 engineering domains (`code_location`, `config_schema_lookup`, `architecture_navigation`, `onboarding`, `security_patterns`, `background_jobs`, `git_commit_inspection`).
+- **Anatomy**: Categorized across 7 engineering domains (`architecture_navigation`, `code_location`, `change_analysis`, `config_schema_lookup`, `debugging_assistance`, `dependency_reasoning`, `onboarding`).
 
 ### 4.2 `evals/run_eval.py`
 - **Relative Path**: [`../../evals/run_eval.py`](../../evals/run_eval.py)
-- **Role**: Benchmark runner executing queries against the live retriever.
 - **Role**: Benchmark runner executing queries against the live retriever. Supports `--generation` flag.
 - **Anatomy**: Computes Recall@5, Recall@10, Mean Reciprocal Rank (MRR), average search latency, and prints a formatted per-category breakdown table.
-- **Verification**: `PYTHONPATH=. uv run python evals/run_eval.py`
+- **Verification**: `uv run python evals/run_eval.py` (or `uv run python evals/run_eval.py --generation`)
 
 ### 4.3 `evals/generation_eval.py`
 - **Relative Path**: [`../../evals/generation_eval.py`](../../evals/generation_eval.py)

@@ -173,9 +173,10 @@ class CodeAwareChunker:
         elif ext in (".yml", ".yaml"):
             yaml_blocks = self.yaml_parser.parse(full_text, rel_path)
             if yaml_blocks:
+                header_prefix = f"# Infrastructure definition: {rel_path}\n" if "compose" in rel_path.lower() else ""
                 return [
                     CodeChunk(
-                        content=(prefix + b.content) if (i == 0 and prefix) else b.content,
+                        content=(prefix + b.content) if (i == 0 and prefix) else (header_prefix + b.content),
                         file_path=rel_path,
                         start_line=b.start_line,
                         end_line=b.end_line,

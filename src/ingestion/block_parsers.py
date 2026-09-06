@@ -61,6 +61,14 @@ class PrismaBlockParser:
 class YamlBlockParser:
     """Chunks YAML configuration files by top-level service, job, or root dictionary blocks."""
 
+    COMPOSE_SERVICE_ROLES = {
+        "minio": "S3-compatible object storage service used for file, image, and media uploads",
+        "redis": "In-memory key-value cache and message broker for BullMQ background workers and sessions",
+        "db": "Primary PostgreSQL relational database service storing core application tables and schema",
+        "web": "Next.js web application server and frontend interface",
+        "worker": "Background worker process running BullMQ async jobs and scheduled tasks",
+    }
+
     def parse(self, text: str, rel_path: str = "") -> List[BlockChunk]:
         lines = text.splitlines()
         if not lines:
@@ -120,7 +128,9 @@ class YamlBlockParser:
                                 identifier=current_name,
                             )
                         )
-                current_block = [f"# Service: {svc} in {rel_path}", line]
+                role = self.COMPOSE_SERVICE_ROLES.get(svc.lower(), "")
+                role_annot = f" ({role})" if role else ""
+                current_block = [f"# Service: {svc} in {rel_path}{role_annot}", line]
                 current_start = idx
                 current_name = svc
                 continue

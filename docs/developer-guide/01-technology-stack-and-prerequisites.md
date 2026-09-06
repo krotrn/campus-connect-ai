@@ -804,7 +804,7 @@ Before modifying AEIA, make sure you have:
 3. [ ] Written a FastAPI endpoint protected by header authentication, `slowapi` rate limiting, and HMAC webhook verification.
 4. [ ] Compiled a LangGraph `StateGraph` with conditional routing and multi-turn session memory.
 5. [ ] Inspected Tree-Sitter AST node trees for TypeScript code blocks and verified leading comment binding.
-6. [ ] Executed `PYTHONPATH=. uv run python evals/run_eval.py --generation` to evaluate retrieval and the RAG Triad.
-7. [ ] Run `uv run pytest -v` locally and verified all 14 test suites (72 tests) pass cleanly.
+6. [ ] Executed `uv run python evals/run_eval.py --generation` to evaluate retrieval and the RAG Triad.
+7. [ ] Run `uv run pytest -v` locally and verified all 15 test suites (76 tests) pass cleanly.
 
 Proceed to **[02 — Architecture, Design & Patterns](02-architecture-design-and-patterns.md)** to learn how these 20 technologies are structured into AEIA's complete software architecture.

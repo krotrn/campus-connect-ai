@@ -352,9 +352,9 @@ flowchart TD
   3. Create [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) provisioning Qdrant service container, syncing `uv`, running ingestion, and executing `pytest`.
 - **Verification Milestone**:
   ```bash
-  PYTHONPATH=. uv run python evals/run_eval.py
+  uv run python evals/run_eval.py
   ```
-  Confirms Recall@5 $\ge$ 85.0%, Recall@10 $\ge$ 95.0%, MRR $\ge$ 0.588.
+  Confirms Recall@5 $\ge$ 100.0%, Recall@10 $\ge$ 100.0%, and tracks MRR against the current 0.7917 baseline.
 - **Codebase Reference**: [`../../evals/run_eval.py`](../../evals/run_eval.py), [`../../.github/workflows/ci.yml`](../../.github/workflows/ci.yml).
 
 ---
@@ -403,7 +403,7 @@ flowchart TD
 - **Verification Milestone**:
   ```bash
   uv run pytest tests/test_generation_eval.py tests/test_memory.py -v
-  PYTHONPATH=. uv run python evals/run_eval.py --generation
+  uv run python evals/run_eval.py --generation
   ```
 
 ---

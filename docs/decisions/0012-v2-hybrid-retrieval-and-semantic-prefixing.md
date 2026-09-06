@@ -146,7 +146,13 @@ Re-ingestion previously took **~24 minutes** because every chunk was re-embedded
 
 ## Consequences
 
-### Measured Results (20-query golden eval)
+> **Current status:** The historical V2 measurements below remain unchanged. The default retrieval path was subsequently improved by file-aware candidate aggregation and abbreviation normalization in [ADR 0027](0027-file-aware-hybrid-retrieval-ranking.md).
+
+The current benchmark result is **100.0% Recall@5**, **100.0% Recall@10**, **0.7917 MRR**, and **46.34 ms** average search latency.
+
+### Historical V2 Snapshot (superseded)
+
+The following table records the result when ADR 0012 was accepted. It is retained for historical comparison; the current default behavior and benchmark are documented in ADR 0027.
 
 | Version | Strategy | Recall@5 | Recall@10 | MRR | Latency |
 |---------|----------|----------|-----------|-----|---------|
@@ -156,7 +162,7 @@ Re-ingestion previously took **~24 minutes** because every chunk was re-embedded
 | V2 — Weighted RRF | Dense 0.7 + BM25 0.3 | 75.0% | 80.0% | 0.470 | 44ms |
 | **V2 Final** | Weighted RRF + semantic prefixes | **85.0%** | **95.0%** | **0.588** | **45ms** |
 
-### Remaining Misses (3/20)
+### Historical V2 Misses
 
 | Query | Expected Source | Result | Root Cause |
 |-------|----------------|--------|------------|

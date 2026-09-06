@@ -100,7 +100,7 @@ graph TD
   2. Read [02 — Architecture](02-architecture-design-and-patterns.md) on **Multi-Format Chunking**, **Hybrid Retrieval Strategy**, and **Semantic Prefix Injection**.
   3. Read Postmortem [`docs/postmortems/001-semantic-bias-config-retrieval.md`](../postmortems/001-semantic-bias-config-retrieval.md).
   4. Study [03 — File Catalog](03-file-by-file-mastery-catalog.md) entries for [`src/ingestion/chunker.py`](../../src/ingestion/chunker.py), [`src/ingestion/ast_chunker.py`](../../src/ingestion/ast_chunker.py), [`src/ingestion/block_parsers.py`](../../src/ingestion/block_parsers.py), [`src/ingestion/pipeline.py`](../../src/ingestion/pipeline.py), [`src/retrieval/retriever.py`](../../src/retrieval/retriever.py), [`src/generation/generator.py`](../../src/generation/generator.py), and [`evals/generation_eval.py`](../../evals/generation_eval.py).
-  5. Run benchmarks: `PYTHONPATH=. uv run python evals/run_eval.py --generation`.
+  5. Run benchmarks: `uv run python evals/run_eval.py --generation`.
 
 ### Track C: The Agentic Systems & Protocol Engineer
 - **Goal**: Understand state graph routing, tool dispatch, multi-turn conversational session memory, coreference query rewriting, and Model Context Protocol (MCP) integrations.
@@ -212,7 +212,7 @@ PYTHONPATH=. uv run uvicorn src.api.main:app --reload --port 8000
 uv run pytest -v
 
 # Run the retrieval benchmark:
-PYTHONPATH=. uv run python evals/run_eval.py
+uv run python evals/run_eval.py
 ```
 
 ---

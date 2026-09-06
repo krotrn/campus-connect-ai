@@ -1,5 +1,7 @@
 # Post-Mortem: Semantic Bias in Config File Retrieval
 
+> This postmortem records the original V2 incident and measurements. The documented misses were resolved by later file-aware ranking work in [ADR 0027](../decisions/0027-file-aware-hybrid-retrieval-ranking.md); see that ADR for the current benchmark.
+
 ## Date
 2026-09-03 → 2026-09-05
 

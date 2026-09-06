@@ -56,7 +56,7 @@ class Retriever:
         Hybrid retrieval: dense vector + BM25 fused with RRF,
         then optionally reranked by a cross-encoder.
         """
-        candidate_k = max(top_k * 4, 20)  # fetch more candidates for reranking
+        candidate_k = max(top_k * 8, 40)  # fetch enough candidates for file aggregation/reranking
 
         dense_results = self._retrieve_dense(query, top_k=candidate_k)
         sparse_results = self._retrieve_bm25(query, top_k=candidate_k)
@@ -69,9 +69,29 @@ class Retriever:
         if self.rerank and candidates:
             candidates = self._rerank(query, candidates, top_k=top_k)
         else:
-            candidates = candidates[:top_k]
+            candidates = self._deduplicate_files(candidates, top_k)
 
         return candidates
+
+    @staticmethod
+    def _deduplicate_files(candidates: List[RetrievedChunk], top_k: int) -> List[RetrievedChunk]:
+        """Rank files by their strongest chunks, then return one citation per file."""
+        chunks_by_file: Dict[str, List[RetrievedChunk]] = {}
+        for candidate in candidates:
+            chunks_by_file.setdefault(candidate.file_path, []).append(candidate)
+
+        ranked_files = sorted(
+            chunks_by_file,
+            key=lambda file_path: sum(
+                chunk.score * weight
+                for chunk, weight in zip(
+                    sorted(chunks_by_file[file_path], key=lambda chunk: chunk.score, reverse=True)[:3],
+                    (1.0, 0.2, 0.1),
+                )
+            ),
+            reverse=True,
+        )
+        return [chunks_by_file[file_path][0] for file_path in ranked_files[:top_k]]
 
     def reload_bm25(self):
         """Re-scroll Qdrant payloads and rebuild the in-memory BM25 index.
@@ -83,7 +103,7 @@ class Retriever:
         """
         print("📚 Building/Reloading BM25 index from Qdrant collection...")
         new_chunks: List[dict] = self._scroll_all_payloads()
-        tokenized = [self._tokenize(c["content"]) for c in new_chunks]
+        tokenized = [self._tokenize(f"{c.get('file_path', '')} {c.get('content', '')}") for c in new_chunks]
         new_bm25 = BM25Okapi(tokenized)
 
         with self._bm25_lock:
@@ -261,7 +281,18 @@ class Retriever:
                 continue
             # Split camelCase: getUserProfile → get, User, Profile
             parts = re.sub(r'([a-z])([A-Z])', r'\1 \2', token).split()
-            expanded.extend(p.lower() for p in parts if p)
+            for part in parts:
+                normalized = part.lower()
+                if not normalized:
+                    continue
+                expanded.append(normalized)
+                # Common code abbreviations should match their natural-language form.
+                if normalized == "authz":
+                    expanded.append("authorization")
+                elif normalized == "authorization":
+                    expanded.extend(("authz", "auth"))
+                elif normalized == "auth":
+                    expanded.append("authentication")
         return expanded
 
 

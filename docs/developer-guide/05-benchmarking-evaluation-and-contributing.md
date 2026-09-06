@@ -100,9 +100,9 @@ The golden evaluation dataset in [`../../evals/dataset.json`](../../evals/datase
 | **`config_schema_lookup`** | Schema definitions, migrations, and env vars. | *"How is the database schema defined in this project?"* (`q002`) | `prisma/schema.prisma`, `prisma/migrations/20260609160102_init/migration.sql` |
 | **`architecture_navigation`** | Top-level system topology and documentation. | *"What is the overall architecture and service topology of Campus Connect?"* (`q003`) | `ARCHITECTURE.md`, `README.md` |
 | **`onboarding`** | Local developer setup and Docker commands. | *"How do I start the development environment locally using Docker?"* (`q004`) | `README.md`, `compose.dev.yml` |
-| **`security_patterns`** | Session validation, CSRF, and authorization. | *"How are session tokens validated in incoming requests?"* (`q010`) | `src/middleware.ts`, `src/lib/utils/auth.utils.server.ts` |
-| **`background_jobs`** | Async workers, Redis queues, and BullMQ. | *"Where are asynchronous background jobs and email queues processed?"* (`q013`) | `src/lib/queue/`, `src/workers/email-worker.ts` |
-| **`git_commit_inspection`** | Historical commit diffs and feature milestones. | *"Which commit introduced integration test suites?"* (`q020`) | `6e19f61` |
+| **`change_analysis`** | Historical migrations and feature changes. | *"Which migration added batch delivery and tracking milestones?"* (`q008`) | `prisma/migrations/20260613082504_add_new_features/migration.sql` |
+| **`debugging_assistance`** | Errors, model fields, and failure behavior. | *"What fields are stored in the UserAddress model?"* (`q016`) | `prisma/schema.prisma`, initial migration |
+| **`dependency_reasoning`** | Relationships between services, models, and tables. | *"What services or components depend on Redis?"* (`q007`) | `ARCHITECTURE.md`, compose files, Redis modules |
 
 ### Anatomy of a Golden Dataset Item
 ```json
@@ -126,7 +126,7 @@ The golden evaluation dataset in [`../../evals/dataset.json`](../../evals/datase
 To run the automated retrieval evaluation harness against your local Qdrant instance:
 
 ```bash
-PYTHONPATH=. uv run python evals/run_eval.py
+uv run python evals/run_eval.py
 ```
 
 ### 3.2 Output Interpretation
@@ -142,25 +142,25 @@ The script evaluates all 20 queries, reports rank positions, and outputs a forma
 ...
 
 ============================================================
-📈 RETRIEVAL EVALUATION RESULTS (V2 — HYBRID + RERANK)
+📈 RETRIEVAL EVALUATION RESULTS (FILE-AWARE HYBRID)
 ============================================================
 Total Test Cases:       20
-Recall@5:               85.0% (17/20)
-Recall@10:              95.0% (19/20)
-Mean Reciprocal Rank:   0.5882
-Average Search Latency: 44.82 ms
+Recall@5:               100.0% (20/20)
+Recall@10:              100.0% (20/20)
+Mean Reciprocal Rank:   0.7917
+Average Search Latency: 46.34 ms
 ============================================================
 
 📂 Category Breakdown:
 Category                 | Count | Recall@5   | Recall@10 
 ----------------------------------------------------------
 code_location            | 4     |    100.0%  |    100.0%
-config_schema_lookup     | 5     |     80.0%  |    100.0%
+config_schema_lookup     | 4     |    100.0%  |    100.0%
 architecture_navigation  | 3     |    100.0%  |    100.0%
-onboarding               | 2     |    100.0%  |    100.0%
-security_patterns        | 2     |    100.0%  |    100.0%
-background_jobs          | 3     |     66.7%  |     66.7%
-git_commit_inspection    | 1     |     50.0%  |    100.0%
+onboarding               | 3     |    100.0%  |    100.0%
+dependency_reasoning     | 2     |    100.0%  |    100.0%
+change_analysis         | 2     |    100.0%  |    100.0%
+debugging_assistance    | 2     |    100.0%  |    100.0%
 ----------------------------------------------------------
 ```
 
@@ -173,10 +173,10 @@ To evaluate the end-to-end synthesis quality (Faithfulness, Relevance, and Conte
 
 ```bash
 # Run both retrieval and generation benchmarks
-PYTHONPATH=. uv run python evals/run_eval.py --generation
+uv run python evals/run_eval.py --generation
 
 # Or run the generation benchmark standalone with custom limits
-PYTHONPATH=. uv run python evals/generation_eval.py --limit 5
+uv run python evals/generation_eval.py --limit 5
 ```
 
 The script evaluates synthesized answers using candidate models (`gemini-3.6-flash` -> `gemini-2.5-flash`), renders a category-by-category terminal breakdown, and persists detailed audit logs to [`../../evals/generation_benchmark.json`](../../evals/generation_benchmark.json):
@@ -206,6 +206,7 @@ The evaluation harness guided every architectural decision in AEIA:
 | **V2 Experiment B (Equal 50/50 RRF)** | 75.0% | 75.0% | 0.464 | 43 ms | **Failed**. Equal BM25 weight caused noisy keyword matches to demote high-confidence dense hits. |
 | **V2 Experiment C (Weighted 70/30 RRF)** | 75.0% | 80.0% | 0.470 | 44 ms | Better balance, but config queries still missed due to semantic opacity. |
 | **V2 Final (Weighted RRF + Semantic Prefixes)** | **85.0%** | **95.0%** | **0.588** | **45 ms** | **Accepted**. Semantic prefixes resolved config opacity while preserving sub-50ms speed. |
+| **Current (File-Aware Hybrid, ADR 0027)** | **100.0%** | **100.0%** | **0.7917** | **46.34 ms** | **Accepted**. File-level score aggregation prevents duplicate chunks from crowding out relevant source files. |
 | **V13 (Tree-Sitter AST & Structural Blocks)** | **85.0%** | **95.0%** | **0.602** | **42 ms** | Syntax-aligned chunk boundaries eliminate bisected functions and orphaned JSDocs. |
 | **V14 (RAG Triad Generation Benchmark)** | **92.4% Faithfulness** | **0.88 Relevance** | **0.84 Precision** | — | Validates zero-hallucination code generation across all 20 golden queries. |
 
@@ -249,13 +250,12 @@ If your change touches chunking, embeddings, or retrieval:
 PYTHONPATH=. uv run python -m src.ingestion.pipeline
 
 # 2. Run the evaluation benchmark
-PYTHONPATH=. uv run python evals/run_eval.py --generation
+uv run python evals/run_eval.py --generation
 ```
 > [!IMPORTANT]
 > **Zero Retrieval Regression Policy**: A pull request will not be approved if `Recall@5` drops below 85.0%, `Recall@10` drops below 95.0%, or average search latency exceeds 50ms.
 
 ### Step 3: Run the Full Test Suite
-Ensure all 14 automated test suites (72 passing tests) pass without errors:
 Ensure all 15 automated test suites (76 passing tests) pass without errors:
 ```bash
 uv run pytest -v
