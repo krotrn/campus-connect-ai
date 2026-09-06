@@ -107,3 +107,4 @@ export function QuotaAlert({ onRetry, onOpenSettings }: QuotaAlertProps) {
     </div>
   );
 }
+
