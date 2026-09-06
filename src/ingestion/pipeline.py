@@ -112,7 +112,11 @@ def _point_id(file_path: str, chunk_index: int) -> int:
 
 class IngestionPipeline:
     def __init__(self):
-        self.client = QdrantClient(url=settings.qdrant_url)
+        self.client = QdrantClient(
+            url=settings.qdrant_url,
+            api_key=settings.qdrant_api_key if settings.qdrant_api_key else None,
+            check_compatibility=False,
+        )
         self.chunker = CodeAwareChunker()
         self.embedding_model = TextEmbedding(model_name=settings.embedding_model)
         self.cache = EmbeddingCache()

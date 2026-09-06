@@ -18,6 +18,7 @@
 |----------|----------|-------------|---------|
 | `GEMINI_API_KEY` | ✅ | Google Gemini API key from AI Studio | — |
 | `QDRANT_URL` | ✅ | Qdrant vector database URL | `http://localhost:6333` |
+| `QDRANT_API_KEY` | ❌ | Qdrant Cloud API key (required for managed/cloud cluster) | — |
 | `COLLECTION_NAME` | ✅ | Qdrant collection name | `campus_connect` |
 | `API_KEY` | ✅ | API authentication key for endpoints | `dev-key-change-me` |
 | `RATE_LIMIT` | ❌ | Request rate limit | `20/minute` |
@@ -84,7 +85,7 @@ curl -X POST https://aeia.onrender.com/ingest \
 # Option B: Run ingestion locally and upload to Qdrant Cloud
 # (Recommended for initial setup — faster and more reliable)
 git clone https://github.com/coding-pundit-nitap/campus-connect corpus/campus-connect
-PYTHONPATH=. QDRANT_URL=https://your-cluster.cloud.qdrant.io:6333 uv run python -m src.ingestion.pipeline
+PYTHONPATH=. QDRANT_URL=https://your-cluster.cloud.qdrant.io:6333 QDRANT_API_KEY=your-api-key uv run python -m src.ingestion.pipeline
 ```
 
 ### Step 4: Verify Deployment
@@ -206,6 +207,7 @@ primary_region = "iad"
 ```bash
 fly secrets set GEMINI_API_KEY=your-gemini-api-key
 fly secrets set QDRANT_URL=https://your-qdrant-cloud-url:6333
+fly secrets set QDRANT_API_KEY=your-qdrant-cloud-api-key
 fly secrets set API_KEY=your-secure-api-key
 
 fly deploy

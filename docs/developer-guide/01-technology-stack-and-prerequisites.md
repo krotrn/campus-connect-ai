@@ -263,6 +263,7 @@ Qdrant is an open-source vector search engine written in Rust. It offers:
 - High-speed Approximate Nearest Neighbor (ANN) search using Hierarchical Navigable Small World (HNSW) graphs.
 - Rich payload metadata storage alongside vectors (storing file path, line numbers, snippet content, file type).
 - Single-binary Docker deployment with minimal memory consumption.
+- Fully compatible with managed Qdrant Cloud clusters via `QDRANT_URL` and `QDRANT_API_KEY`.
 
 ### Core Concepts to Master
 1. **Collections & Vector Configuration**:

@@ -33,7 +33,11 @@ class RetrievedChunk:
 
 class Retriever:
     def __init__(self, rerank: bool = False):
-        self.client = QdrantClient(url=settings.qdrant_url)
+        self.client = QdrantClient(
+            url=settings.qdrant_url,
+            api_key=settings.qdrant_api_key if settings.qdrant_api_key else None,
+            check_compatibility=False,
+        )
         self.embedding_model = TextEmbedding(model_name=settings.embedding_model)
         self.rerank = rerank
         self._bm25_lock = threading.Lock()
@@ -103,8 +107,11 @@ class Retriever:
         """
         print("📚 Building/Reloading BM25 index from Qdrant collection...")
         new_chunks: List[dict] = self._scroll_all_payloads()
-        tokenized = [self._tokenize(f"{c.get('file_path', '')} {c.get('content', '')}") for c in new_chunks]
-        new_bm25 = BM25Okapi(tokenized)
+        if new_chunks:
+            tokenized = [self._tokenize(f"{c.get('file_path', '')} {c.get('content', '')}") for c in new_chunks]
+            new_bm25 = BM25Okapi(tokenized)
+        else:
+            new_bm25 = None
 
         with self._bm25_lock:
             self._all_chunks = new_chunks
@@ -153,6 +160,9 @@ class Retriever:
         with self._bm25_lock:
             bm25 = self._bm25
             all_chunks = self._all_chunks
+
+        if not bm25 or not all_chunks:
+            return []
 
         scores = bm25.get_scores(tokens)
 

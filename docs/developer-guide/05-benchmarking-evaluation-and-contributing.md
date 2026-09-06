@@ -142,25 +142,25 @@ The script evaluates all 20 queries, reports rank positions, and outputs a forma
 ...
 
 ============================================================
-📈 RETRIEVAL EVALUATION RESULTS (FILE-AWARE HYBRID)
+📈 RETRIEVAL EVALUATION RESULTS (V2 — HYBRID + RERANK)
 ============================================================
 Total Test Cases:       20
-Recall@5:               100.0% (20/20)
+Recall@5:               85.0% (17/20)
 Recall@10:              100.0% (20/20)
-Mean Reciprocal Rank:   0.7917
-Average Search Latency: 46.34 ms
+Mean Reciprocal Rank:   0.6425
+Average Search Latency: 44.23 ms
 ============================================================
 
 📂 Category Breakdown:
 Category                 | Count | Recall@5   | Recall@10 
 ----------------------------------------------------------
-code_location            | 4     |    100.0%  |    100.0%
-config_schema_lookup     | 4     |    100.0%  |    100.0%
-architecture_navigation  | 3     |    100.0%  |    100.0%
-onboarding               | 3     |    100.0%  |    100.0%
-dependency_reasoning     | 2     |    100.0%  |    100.0%
-change_analysis         | 2     |    100.0%  |    100.0%
-debugging_assistance    | 2     |    100.0%  |    100.0%
+code_location            | 4     |     75.0% |    100.0%
+config_schema_lookup     | 4     |     50.0% |    100.0%
+architecture_navigation  | 3     |    100.0% |    100.0%
+onboarding               | 3     |    100.0% |    100.0%
+dependency_reasoning     | 2     |    100.0% |    100.0%
+change_analysis          | 2     |    100.0% |    100.0%
+debugging_assistance     | 2     |    100.0% |    100.0%
 ----------------------------------------------------------
 ```
 

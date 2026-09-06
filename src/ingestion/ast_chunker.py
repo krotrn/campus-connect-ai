@@ -6,12 +6,19 @@ enums, and exported constants) as discrete semantic chunks without cutting
 syntax constructs across arbitrary character boundaries.
 """
 
+import bisect
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List
 
 import tree_sitter_typescript as tstypescript
 from tree_sitter import Language, Node, Parser
+
+
+@dataclass
+class _Span:
+    start_byte: int
+    end_byte: int
 
 
 @dataclass
@@ -42,13 +49,11 @@ class TreeSitterCodeParser:
     def __init__(self):
         self._ts_lang = Language(tstypescript.language_typescript())
         self._tsx_lang = Language(tstypescript.language_tsx())
-        self._ts_parser = Parser(self._ts_lang)
-        self._tsx_parser = Parser(self._tsx_lang)
 
     def _get_parser(self, file_path: Path) -> Parser:
         if file_path.suffix.lower() == ".tsx":
-            return self._tsx_parser
-        return self._ts_parser
+            return Parser(self._tsx_lang)
+        return Parser(self._ts_lang)
 
     @staticmethod
     def _extract_name(node: Node, source_bytes: bytes) -> str:
@@ -83,37 +88,45 @@ class TreeSitterCodeParser:
         if not root.children:
             return []
 
+        line_starts = [0]
+        for idx, b in enumerate(source_bytes):
+            if b == 10:  # ord('\n')
+                line_starts.append(idx + 1)
+
+        def get_line_number(byte_offset: int) -> int:
+            return bisect.bisect_right(line_starts, byte_offset)
+
         chunks: List[AstChunk] = []
-        pending_nodes: List[Node] = []
+        pending_spans: List[_Span] = []
         pending_chars = 0
 
         def flush_pending():
-            nonlocal pending_nodes, pending_chars
-            if not pending_nodes:
+            nonlocal pending_spans, pending_chars
+            if not pending_spans:
                 return
-            first = pending_nodes[0]
-            last = pending_nodes[-1]
+            first = pending_spans[0]
+            last = pending_spans[-1]
             content = source_bytes[first.start_byte : last.end_byte].decode("utf-8", errors="ignore").strip()
             if content:
                 chunks.append(
                     AstChunk(
                         content=content,
-                        start_line=first.start_point.row + 1,
-                        end_line=last.end_point.row + 1,
+                        start_line=get_line_number(first.start_byte),
+                        end_line=get_line_number(max(first.start_byte, last.end_byte - 1)),
                         node_type="block",
                         symbol_name="",
                     )
                 )
-            pending_nodes = []
+            pending_spans = []
             pending_chars = 0
 
-        leading_comments: List[Node] = []
+        leading_comments: List[_Span] = []
 
         for child in root.children:
             if child.type == ";":
                 continue
             if child.type == "comment":
-                leading_comments.append(child)
+                leading_comments.append(_Span(child.start_byte, child.end_byte))
                 continue
 
             unwrapped = self._unwrap_export(child)
@@ -124,15 +137,15 @@ class TreeSitterCodeParser:
                 name = self._extract_name(unwrapped, source_bytes)
                 if node_chars >= min_chunk_chars:
                     flush_pending()
-                    start_node = leading_comments[0] if leading_comments else child
+                    start_byte = leading_comments[0].start_byte if leading_comments else child.start_byte
                     chunk_text = (
-                        source_bytes[start_node.start_byte : child.end_byte].decode("utf-8", errors="ignore").strip()
+                        source_bytes[start_byte : child.end_byte].decode("utf-8", errors="ignore").strip()
                     )
                     chunks.append(
                         AstChunk(
                             content=chunk_text,
-                            start_line=start_node.start_point.row + 1,
-                            end_line=child.end_point.row + 1,
+                            start_line=get_line_number(start_byte),
+                            end_line=get_line_number(max(start_byte, child.end_byte - 1)),
                             node_type=unwrapped.type,
                             symbol_name=name,
                         )
@@ -142,16 +155,16 @@ class TreeSitterCodeParser:
 
             # If not emitted with declaration, bundle leading comments into pending
             if leading_comments:
-                pending_nodes.extend(leading_comments)
+                pending_spans.extend(leading_comments)
                 leading_comments = []
 
-            pending_nodes.append(child)
+            pending_spans.append(_Span(child.start_byte, child.end_byte))
             pending_chars += node_chars
 
             if pending_chars >= max_chunk_chars:
                 flush_pending()
 
         if leading_comments:
-            pending_nodes.extend(leading_comments)
+            pending_spans.extend(leading_comments)
         flush_pending()
         return chunks

@@ -23,9 +23,12 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - QDRANT_URL=http://qdrant:6333
-      - COLLECTION_NAME=campus_connect
+      - QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}
+      - QDRANT_API_KEY=${QDRANT_API_KEY:-}
+      - COLLECTION_NAME=${COLLECTION_NAME:-campus_connect}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - API_KEY=${API_KEY:-dev-key-change-me}
+      - RATE_LIMIT=${RATE_LIMIT:-20/minute}
     depends_on:
       qdrant:
         condition: service_healthy

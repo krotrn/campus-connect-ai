@@ -354,7 +354,7 @@ flowchart TD
   ```bash
   uv run python evals/run_eval.py
   ```
-  Confirms Recall@5 $\ge$ 100.0%, Recall@10 $\ge$ 100.0%, and tracks MRR against the current 0.7917 baseline.
+  Confirms Recall@5 $\ge$ 85.0%, Recall@10 = 100.0%, and MRR $\ge$ 0.642.
 - **Codebase Reference**: [`../../evals/run_eval.py`](../../evals/run_eval.py), [`../../.github/workflows/ci.yml`](../../.github/workflows/ci.yml).
 
 ---
