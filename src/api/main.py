@@ -16,6 +16,7 @@ from starlette.responses import JSONResponse as StarletteJSONResponse
 
 from src.agent import create_agent_graph
 from src.agent.memory import memory_manager, rewrite_query_with_history
+from src.agent.router import route_query
 from src.api.tasks import IngestionStatus, get_status, trigger_ingestion
 from src.api.webhook import handle_github_webhook
 from src.config import settings
@@ -199,6 +200,8 @@ class AskResponse(BaseModel):
     latency_ms: float
     session_id: Optional[str] = None
     rewritten_question: Optional[str] = None
+    route: Optional[str] = None
+    route_reasoning: Optional[str] = None
 
 
 class AgentAskRequest(BaseModel):
@@ -316,31 +319,75 @@ def _stream_ask_response(
     session_mem: Any,
     retriever: Retriever,
     generator: AnswerGenerator,
+    agent: Optional[Any] = None,
 ):
     start_time = time.time()
-    chunks = retriever.retrieve(search_query, top_k=body.top_k)
+    route, reasoning, target = route_query(search_query)
 
     def event_generator():
-        full_answer = []
         try:
-            for event in generator.generate_stream(search_query, chunks, history=session_mem.get_history()):
-                if event["type"] == "sources":
-                    payload = {
-                        "type": "sources",
-                        "sources": event["sources"],
-                        "session_id": session_id,
-                        "rewritten_question": search_query if search_query != body.question else None,
-                    }
-                    yield f"data: {json.dumps(payload)}\n\n"
-                elif event["type"] == "token":
-                    full_answer.append(event["text"])
-                    yield f"data: {json.dumps({'type': 'token', 'text': event['text']})}\n\n"
-                elif event["type"] == "done":
-                    latency_ms = round((time.time() - start_time) * 1000, 2)
-                    final_text = "".join(full_answer)
-                    session_mem.add_turn(body.question, final_text)
-                    done_payload = {"type": "done", "latency_ms": latency_ms, "session_id": session_id}
-                    yield f"data: {json.dumps(done_payload)}\n\n"
+            if route != "direct_rag" and agent:
+                final_state = agent.invoke({
+                    "question": search_query,
+                    "top_k": body.top_k,
+                    "steps_taken": ["received_query"],
+                })
+                latency_ms = round((time.time() - start_time) * 1000, 2)
+                answer_text = final_state.get("answer", "")
+                sources = final_state.get("sources", [])
+
+                payload = {
+                    "type": "sources",
+                    "sources": sources,
+                    "session_id": session_id,
+                    "rewritten_question": search_query if search_query != body.question else None,
+                    "route": route,
+                    "route_reasoning": reasoning,
+                }
+                yield f"data: {json.dumps(payload)}\n\n"
+
+                lines = answer_text.splitlines(keepends=True)
+                for line in lines:
+                    yield f"data: {json.dumps({'type': 'token', 'text': line})}\n\n"
+
+                session_mem.add_turn(body.question, answer_text)
+                done_payload = {
+                    "type": "done",
+                    "latency_ms": latency_ms,
+                    "session_id": session_id,
+                    "route": route,
+                    "route_reasoning": reasoning,
+                }
+                yield f"data: {json.dumps(done_payload)}\n\n"
+            else:
+                chunks = retriever.retrieve(search_query, top_k=body.top_k)
+                full_answer = []
+                for event in generator.generate_stream(search_query, chunks, history=session_mem.get_history()):
+                    if event["type"] == "sources":
+                        payload = {
+                            "type": "sources",
+                            "sources": event["sources"],
+                            "session_id": session_id,
+                            "rewritten_question": search_query if search_query != body.question else None,
+                            "route": "direct_rag",
+                            "route_reasoning": reasoning,
+                        }
+                        yield f"data: {json.dumps(payload)}\n\n"
+                    elif event["type"] == "token":
+                        full_answer.append(event["text"])
+                        yield f"data: {json.dumps({'type': 'token', 'text': event['text']})}\n\n"
+                    elif event["type"] == "done":
+                        latency_ms = round((time.time() - start_time) * 1000, 2)
+                        final_text = "".join(full_answer)
+                        session_mem.add_turn(body.question, final_text)
+                        done_payload = {
+                            "type": "done",
+                            "latency_ms": latency_ms,
+                            "session_id": session_id,
+                            "route": "direct_rag",
+                            "route_reasoning": reasoning,
+                        }
+                        yield f"data: {json.dumps(done_payload)}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
 
@@ -394,6 +441,7 @@ async def ask_question(request: Request, body: AskRequest):
             session_mem=session_mem,
             retriever=retriever,
             generator=generator,
+            agent=agent,
         )
 
     try:
@@ -424,6 +472,8 @@ async def ask_question(request: Request, body: AskRequest):
                 latency_ms=latency_ms,
                 session_id=session_id,
                 rewritten_question=search_query if search_query != body.question else None,
+                route=final_state.get("route", "direct_rag"),
+                route_reasoning=final_state.get("route_reasoning", ""),
             )
 
         result = traced_ask(search_query, body.top_k, retriever, generator, history=history)
@@ -436,6 +486,8 @@ async def ask_question(request: Request, body: AskRequest):
             latency_ms=result["latency_ms"],
             session_id=session_id,
             rewritten_question=search_query if search_query != body.question else None,
+            route="direct_rag",
+            route_reasoning="Direct RAG invocation",
         )
     except (AEIAError, APIError, HTTPException):
         raise

@@ -2,16 +2,12 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { siteConfig } from "@/config/site";
-import { buttonVariants } from "@/components/ui/button";
-import { Zap, Settings, RefreshCw, Radio } from "lucide-react";
+import { Zap, Settings, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, Code } from "lucide-react";
 import { aeiaService } from "@/services/aeia.service";
 import { SettingsDialog } from "@/components/aeia/settings-dialog";
 
-export function Header() {
 interface HeaderProps {
   onResetChat?: () => void;
 }
@@ -46,13 +42,15 @@ export function Header({ onResetChat }: HeaderProps) {
     return () => clearInterval(interval);
   }, [fetchHealth]);
 
+  const handleReset = () => {
+    if (onResetChat) {
+      onResetChat();
+    } else if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("aeia:reset-chat"));
+    }
+  };
+
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-8">
-        <div className="flex items-center gap-6">
-          <Link href="/" className="flex items-center gap-2 font-bold text-lg">
-            <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-extrabold shadow-sm">
-              IH
     <>
       <header className="sticky top-0 z-40 w-full border-b border-border/40 bg-slate-950/80 backdrop-blur supports-[backdrop-filter]:bg-slate-950/60">
         <div className="container mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6">
@@ -72,11 +70,6 @@ export function Header({ onResetChat }: HeaderProps) {
             <span className="hidden md:inline text-xs text-muted-foreground border-l border-border pl-3">
               Engineering Intelligence for Campus Connect (~94k LOC)
             </span>
-            <span>{siteConfig.name}</span>
-          </Link>
-          <Badge variant="secondary" className="hidden sm:inline-flex gap-1 items-center font-medium">
-            <Sparkles className="size-3 text-amber-500" /> Next.js 16 + shadcn/ui
-          </Badge>
           </div>
 
           {/* Right Action Bar */}
@@ -111,13 +104,7 @@ export function Header({ onResetChat }: HeaderProps) {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => {
-                if (onResetChat) {
-                  onResetChat();
-                } else if (typeof window !== "undefined") {
-                  window.dispatchEvent(new CustomEvent("aeia:reset-chat"));
-                }
-              }}
+              onClick={handleReset}
               className="h-7 px-2.5 text-xs gap-1.5 border-border bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white"
               title="Start a fresh conversation"
             >
@@ -140,38 +127,6 @@ export function Header({ onResetChat }: HeaderProps) {
         </div>
       </header>
 
-        <nav className="flex items-center gap-4">
-          <Link
-            href="#features"
-            className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Features
-          </Link>
-          <Link
-            href="#architecture"
-            className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Architecture
-          </Link>
-          <Link
-            href="/api/health"
-            target="_blank"
-            className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Health API
-          </Link>
-          <a
-            href={siteConfig.links.github}
-            target="_blank"
-            rel="noreferrer"
-            className={buttonVariants({ variant: "outline", size: "sm", className: "flex items-center gap-2" })}
-          >
-            <Code className="size-4" />
-            <span>GitHub</span>
-          </a>
-        </nav>
-      </div>
-    </header>
       <SettingsDialog
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
