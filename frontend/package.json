@@ -1,6 +1,8 @@
 {
   "name": "insta_hire_zetwork",
   "version": "0.1.0",
+  "name": "aeia-frontend",
+  "version": "0.4.0",
   "private": true,
   "scripts": {
     "dev": "next dev",

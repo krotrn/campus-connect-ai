@@ -6,6 +6,8 @@ const serverEnvSchema = z.object({
 
 const clientEnvSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().url().default("http://localhost:3000"),
+  NEXT_PUBLIC_API_URL: z.string().default("http://localhost:8000"),
+  NEXT_PUBLIC_API_KEY: z.string().default("dev-key-change-me"),
 });
 
 /**
@@ -22,6 +24,8 @@ function validateEnv() {
 
   const parsedClient = clientEnvSchema.safeParse({
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+    NEXT_PUBLIC_API_KEY: process.env.NEXT_PUBLIC_API_KEY,
   });
 
   if (!parsedClient.success) {

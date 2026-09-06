@@ -1,10 +1,13 @@
 # NextJs - Production-Grade Next.js 16 Starter
+# AEIA Web UI (Next.js + Vercel)
 
 A robust, enterprise-ready template built with **Next.js 16**, **React 19**, **TypeScript**, **Tailwind CSS v4**, **shadcn/ui**, **Vitest**, and **Playwright**.
+Modern, interactive Web UI console for the **AEIA (AI Engineering Intelligence Assistant)** system, built with **Next.js 16**, **React 19**, **TypeScript**, and **Tailwind CSS**.
 
 ---
 
 ## 🚀 Tech Stack & Features
+## ⚡ Features
 
 - **Framework**: [Next.js 16](https://nextjs.org/) (Turbopack, App Router under `src/app`)
 - **Language**: [TypeScript](https://www.typescriptlang.org/) (Strict mode, path aliases `@/*`)
@@ -16,10 +19,17 @@ A robust, enterprise-ready template built with **Next.js 16**, **React 19**, **T
 - **Linting & Formatting**: [ESLint](https://eslint.org/) (Next.js config) + [Prettier](https://prettier.io/) + `prettier-plugin-tailwindcss`
 - **Git Hooks**: [Husky](https://typicode.github.io/husky/) + [lint-staged](https://github.com/lint-staged/lint-staged)
 - **CI / CD**: GitHub Actions workflow for linting, typechecking, tests, and production build
+- **Hybrid RAG & LangGraph Agent Modes**: Switch seamlessly between fast direct 70/30 Dense+BM25 RRF search and multi-step LangGraph agent orchestration (git history, diff audits, dependency scans).
+- **Real-Time Streaming**: Token-by-token streaming via Server-Sent Events (SSE) with instant source citation display.
+- **Code Inspector Modal**: Interactive code preview modal with line numbers, file paths, relevance scoring, and 1-click clipboard copy.
+- **Backend Health Polling**: Live status badge tracking Qdrant index health and total indexed vector chunks.
+- **In-App Backend Configuration**: Flexible settings modal to configure or override the FastAPI backend URL and `X-API-Key` without redeploying.
+- **Dark Mode First**: Clean, responsive terminal aesthetic styled with Tailwind CSS and shadcn/ui primitives.
 
 ---
 
 ## 📁 Directory Architecture
+## 🚀 Quickstart (Local Development)
 
 ```
 insta_hire_zetwork/
@@ -81,6 +91,7 @@ insta_hire_zetwork/
 - **Package Manager**: `pnpm` (v10 recommended)
 
 ### 2. Installation
+### 1. Install Dependencies
 ```bash
 # Clone the repository
 git clone <repository-url>
@@ -91,19 +102,31 @@ pnpm install
 ```
 
 ### 3. Environment Setup
+### 2. Configure Environment (Optional)
+Copy `.env.example` to `.env.local`:
 ```bash
 cp .env.example .env.local
 ```
 
 ### 4. Run Development Server
+Configure your local or remote backend:
+```env
+NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_API_KEY=dev-key-change-me
+```
+
+### 3. Run Development Server
 ```bash
 pnpm run dev
+pnpm dev
 ```
 Open [http://localhost:3000](http://localhost:3000) to view the application.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ---
 
 ## 🧪 Available Scripts & Testing
+## 🌐 Deploying to Vercel
 
 | Command | Description |
 | :--- | :--- |
@@ -119,13 +142,44 @@ Open [http://localhost:3000](http://localhost:3000) to view the application.
 | `pnpm run test:coverage` | Generate code coverage report |
 | `pnpm run test:e2e` | Run Playwright End-to-End test suite |
 | `pnpm run test:e2e:ui` | Open interactive Playwright Test UI |
+Deploying this UI to Vercel takes less than 2 minutes:
+
+### Step 1: Import Repository to Vercel
+1. Go to your [Vercel Dashboard](https://vercel.com/new).
+2. Select and import your GitHub repository (`krotrn/campus-connect-ai` or `aeia`).
+
+### Step 2: Configure Project Settings
+In the Vercel project configuration screen:
+- **Framework Preset**: `Next.js`
+- **Root Directory**: Click **Edit** and select `frontend`
+
+### Step 3: Set Environment Variables
+Add the following Environment Variables in Vercel:
+| Variable Name | Description | Example Value |
+| :--- | :--- | :--- |
+| `NEXT_PUBLIC_API_URL` | URL of your deployed AEIA FastAPI backend | `https://aeia-backend.up.railway.app` |
+| `NEXT_PUBLIC_API_KEY` | API Key configured on your backend (`API_KEY`) | `your-secret-api-key` |
+
+> **Note**: Even after deployment, users can click the **Settings** button in the top right to point the UI to a different backend URL or test connections dynamically.
+
+### Step 4: Deploy
+Click **Deploy**. Vercel will build and deploy your Next.js frontend globally on their Edge Network!
 
 ---
 
 ## 🔒 Quality & CI Pipeline
+## 🧪 Available Scripts
 
 Every pull request and push to main runs our GitHub Actions workflow:
 1. **ESLint**: Static analysis & lint rules
 2. **TypeScript**: Strict typecheck
 3. **Vitest**: Unit & Component tests
 4. **Next.js Build**: Turbopack production compilation
+| Command | Action |
+| :--- | :--- |
+| `pnpm dev` | Start development server on port 3000 |
+| `pnpm build` | Create optimized production build |
+| `pnpm start` | Start production server |
+| `pnpm lint` | Run ESLint checks |
+| `pnpm typecheck` | Run TypeScript compiler checks |
+| `pnpm test` | Run Vitest unit/integration tests |
