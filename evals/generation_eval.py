@@ -147,11 +147,11 @@ class RAGTriadJudge:
             except Exception as e:
                 last_error = e
                 continue
-        print(f"⚠️ Judge evaluation fallback ({last_error})")
+        print(f"⚠️ Judge evaluation FAILED — recording 0.0 scores ({last_error})")
         return {
-            "faithfulness": 1.0,
-            "answer_relevance": 1.0,
-            "context_precision": 1.0,
+            "faithfulness": 0.0,
+            "answer_relevance": 0.0,
+            "context_precision": 0.0,
             "unsupported_claims": [],
             "error": str(last_error),
         }

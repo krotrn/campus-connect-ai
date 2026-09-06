@@ -275,8 +275,72 @@
     const closeModal = document.getElementById('closeModal');
     const copyBtn = document.getElementById('copyBtn');
     const modalCopyCode = document.getElementById('modalCopyCode');
-
     const newSessionBtn = document.getElementById('newSessionBtn');
+
+    // Clipboard helper with legacy fallback
+    async function copyToClipboard(text) {
+      if (!text) return;
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+          return;
+        }
+      } catch (e) {
+        // Fallback below
+      }
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-9999px';
+      textArea.style.top = '-9999px';
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      try {
+        document.execCommand('copy');
+      } finally {
+        textArea.remove();
+      }
+    }
+
+    // Language mapper for syntax highlighting
+    function getLanguageFromPath(filePath) {
+      if (!filePath) return 'plaintext';
+      const ext = filePath.split('.').pop().toLowerCase();
+      const map = {
+        ts: 'typescript',
+        tsx: 'typescript',
+        js: 'javascript',
+        jsx: 'javascript',
+        py: 'python',
+        json: 'json',
+        yml: 'yaml',
+        yaml: 'yaml',
+        md: 'markdown',
+        sql: 'sql',
+        sh: 'bash',
+        bash: 'bash',
+        toml: 'ini',
+      };
+      return map[ext] || 'plaintext';
+    }
+
+    function renderMarkdown(markdown, allowIncompleteFence = false) {
+      let source = markdown || '';
+      if (allowIncompleteFence) {
+        const fenceCount = (source.match(/^\s*```/gm) || []).length;
+        if (fenceCount % 2 === 1) source += '\n```';
+      }
+
+      const html = marked.parse(source);
+      const container = document.createElement('div');
+      container.innerHTML = html;
+      container.querySelectorAll('pre code').forEach(code => {
+        delete code.dataset.highlighted;
+        hljs.highlightElement(code);
+      });
+      return container.innerHTML;
+    }
 
     // LocalStorage API key persistence
     const savedKey = localStorage.getItem('aeia_api_key');
@@ -304,21 +368,24 @@
 
     // Health check on startup
     async function checkHealth() {
+      const dot = statusBadge.querySelector('span:first-child');
       try {
         const res = await fetch('/health');
         if (res.ok) {
           const data = await res.json();
           statusBadge.classList.remove('hidden');
-          statusText.textContent = `Qdrant Healthy (${data.indexed_points.toLocaleString()} points)`;
+          const count = data.points_indexed ?? data.indexed_points ?? 0;
+          statusText.textContent = `Qdrant Healthy (${count.toLocaleString()} chunks)`;
+          if (dot) dot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse';
         } else {
           statusBadge.classList.remove('hidden');
           statusText.textContent = 'Degraded';
-          statusText.previousElementSibling.className = 'w-2 h-2 rounded-full bg-amber-400';
+          if (dot) dot.className = 'w-2 h-2 rounded-full bg-amber-400';
         }
       } catch (err) {
         statusBadge.classList.remove('hidden');
         statusText.textContent = 'Server Offline';
-        statusText.previousElementSibling.className = 'w-2 h-2 rounded-full bg-rose-500';
+        if (dot) dot.className = 'w-2 h-2 rounded-full bg-rose-500';
       }
     }
     checkHealth();
@@ -339,12 +406,20 @@
     modeRagBtn.addEventListener('click', () => setMode('rag'));
     modeAgentBtn.addEventListener('click', () => setMode('agent'));
 
+    function submitQuery() {
+      if (queryForm.requestSubmit) {
+        queryForm.requestSubmit();
+      } else {
+        queryForm.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+      }
+    }
+
     // Example buttons
     document.querySelectorAll('.example-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         queryInput.value = btn.getAttribute('data-query');
         setMode(btn.getAttribute('data-mode'));
-        queryForm.dispatchEvent(new Event('submit'));
+        submitQuery();
       });
     });
 
@@ -352,7 +427,7 @@
     queryInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        queryForm.dispatchEvent(new Event('submit'));
+        submitQuery();
       }
     });
 
@@ -370,59 +445,161 @@
       citationsSection.classList.add('hidden');
       telemetryBar.classList.add('hidden');
 
-      const endpoint = currentMode === 'agent' ? '/agent/ask' : '/ask';
       const apiKey = apiKeyInput.value.trim();
       const startTime = performance.now();
 
       try {
-        const res = await fetch(endpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-API-Key': apiKey,
-          },
-          body: JSON.stringify({ question, session_id: currentSessionId })
-        });
-
-        const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
-
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.detail || `Server error (${res.status})`);
-        }
-
-        const data = await res.json();
-        currentResponseData = data;
-        if (data.session_id) currentSessionId = data.session_id;
-
-        // Render Markdown & Coreference Notice
-        let htmlContent = '';
-        if (data.rewritten_question) {
-          htmlContent += `<div class="mb-3 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-300 text-xs flex items-center space-x-2">
-            <span>🔄</span><span><b>Expanded Context Query:</b> ${data.rewritten_question}</span>
-          </div>`;
-        }
-        htmlContent += marked.parse(data.answer);
-        answerText.innerHTML = htmlContent;
-        document.querySelectorAll('#answerText pre code').forEach(el => hljs.highlightElement(el));
-
-        // Telemetry
-        telemetryBar.classList.remove('hidden');
-        metricRoute.textContent = data.route || data.route_taken || (currentMode === 'agent' ? 'LangGraph Agent' : 'Direct Hybrid RAG');
-        metricLatency.textContent = `${data.latency_ms ? (data.latency_ms / 1000).toFixed(2) : elapsed}s`;
-        metricChunks.textContent = (data.sources || []).length;
-
-        // Render Citations
-        citationsList.innerHTML = '';
-        if (data.sources && data.sources.length > 0) {
-          citationsSection.classList.remove('hidden');
-          data.sources.forEach((s, idx) => {
-            const chip = document.createElement('button');
-            chip.className = 'px-2.5 py-1 text-xs font-mono rounded-md bg-slate-800 border border-slate-700 hover:border-emerald-500/60 hover:bg-slate-750 text-slate-300 flex items-center space-x-1.5 transition';
-            chip.innerHTML = `<span class="text-emerald-400 text-[10px]">#${idx+1}</span> <span>${s.file_path}#L${s.start_line}-L${s.end_line}</span>`;
-            chip.addEventListener('click', () => openCodeModal(s));
-            citationsList.appendChild(chip);
+        if (currentMode === 'rag') {
+          // ── Real-Time Streaming Mode (SSE) ─────────────────────────────────
+          const res = await fetch('/ask/stream', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-API-Key': apiKey,
+            },
+            body: JSON.stringify({ question, session_id: currentSessionId, stream: true })
           });
+
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            let errMsg = `Server error (${res.status})`;
+            if (typeof errData.detail === 'string') errMsg = errData.detail;
+            else if (Array.isArray(errData.detail)) errMsg = errData.detail.map(d => d.msg || JSON.stringify(d)).join(', ');
+            else if (errData.message) errMsg = errData.message;
+            throw new Error(errMsg);
+          }
+
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder('utf-8');
+          let buffer = '';
+          let accumulatedAnswer = '';
+          let streamSources = [];
+          let rewrittenNotice = '';
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop(); // retain partial line
+
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed.startsWith('data:')) continue;
+              const jsonStr = trimmed.slice(5).trim();
+              if (!jsonStr) continue;
+
+              try {
+                const event = JSON.parse(jsonStr);
+
+                if (event.type === 'sources') {
+                  streamSources = event.sources || [];
+                  if (event.session_id) currentSessionId = event.session_id;
+
+                  // 1. Instant citations render (~35ms)
+                  citationsList.innerHTML = '';
+                  if (streamSources.length > 0) {
+                    citationsSection.classList.remove('hidden');
+                    streamSources.forEach((s, idx) => {
+                      const chip = document.createElement('button');
+                      chip.className = 'px-2.5 py-1 text-xs font-mono rounded-md bg-slate-800 border border-slate-700 hover:border-emerald-500/60 hover:bg-slate-750 text-slate-300 flex items-center space-x-1.5 transition';
+                      const range = s.start_line && s.end_line ? `#L${s.start_line}-L${s.end_line}` : '';
+                      chip.innerHTML = `<span class="text-emerald-400 text-[10px]">#${idx+1}</span> <span>${s.file_path}${range}</span>`;
+                      chip.addEventListener('click', () => openCodeModal(s));
+                      citationsList.appendChild(chip);
+                    });
+                  }
+
+                  if (event.rewritten_question) {
+                    rewrittenNotice = `<div class="mb-3 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-300 text-xs flex items-center space-x-2">
+                      <span>🔄</span><span><b>Expanded Context Query:</b> ${event.rewritten_question}</span>
+                    </div>`;
+                  }
+                  answerText.innerHTML = `${rewrittenNotice}<div id="streamTokens" class="prose prose-invert max-w-none text-sm text-slate-200 leading-relaxed"></div>`;
+
+                  // Telemetry
+                  telemetryBar.classList.remove('hidden');
+                  metricRoute.textContent = 'Direct Hybrid RAG (Streaming)';
+                  metricChunks.textContent = streamSources.length;
+                  metricLatency.textContent = 'streaming...';
+
+                } else if (event.type === 'token') {
+                  accumulatedAnswer += event.text;
+                  const tokenEl = document.getElementById('streamTokens');
+                  if (tokenEl) {
+                    tokenEl.innerHTML = renderMarkdown(accumulatedAnswer, true);
+                  }
+
+                } else if (event.type === 'done') {
+                  const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
+                  metricLatency.textContent = `${event.latency_ms ? (event.latency_ms / 1000).toFixed(2) : elapsed}s`;
+                  currentResponseData = {
+                    answer: accumulatedAnswer,
+                    sources: streamSources,
+                    session_id: currentSessionId,
+                  };
+
+                } else if (event.type === 'error') {
+                  throw new Error(event.error || 'Streaming error');
+                }
+              } catch (parseErr) {
+                // Ignore chunk parse errors
+              }
+            }
+          }
+
+        } else {
+          // ── Agent State Graph Mode ─────────────────────────────────────────
+          const res = await fetch('/agent/ask', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-API-Key': apiKey,
+            },
+            body: JSON.stringify({ question, session_id: currentSessionId })
+          });
+
+          const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
+
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            let errMsg = `Server error (${res.status})`;
+            if (typeof errData.detail === 'string') errMsg = errData.detail;
+            else if (Array.isArray(errData.detail)) errMsg = errData.detail.map(d => d.msg || JSON.stringify(d)).join(', ');
+            else if (errData.message) errMsg = errData.message;
+            throw new Error(errMsg);
+          }
+
+          const data = await res.json();
+          currentResponseData = data;
+          if (data.session_id) currentSessionId = data.session_id;
+
+          let htmlContent = '';
+          if (data.rewritten_question) {
+            htmlContent += `<div class="mb-3 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-300 text-xs flex items-center space-x-2">
+              <span>🔄</span><span><b>Expanded Context Query:</b> ${data.rewritten_question}</span>
+            </div>`;
+          }
+          htmlContent += renderMarkdown(data.answer);
+          answerText.innerHTML = htmlContent;
+
+          telemetryBar.classList.remove('hidden');
+          metricRoute.textContent = data.route || 'LangGraph Agent';
+          metricLatency.textContent = `${data.latency_ms ? (data.latency_ms / 1000).toFixed(2) : elapsed}s`;
+          metricChunks.textContent = (data.sources || []).length;
+
+          citationsList.innerHTML = '';
+          if (data.sources && data.sources.length > 0) {
+            citationsSection.classList.remove('hidden');
+            data.sources.forEach((s, idx) => {
+              const chip = document.createElement('button');
+              chip.className = 'px-2.5 py-1 text-xs font-mono rounded-md bg-slate-800 border border-slate-700 hover:border-emerald-500/60 hover:bg-slate-750 text-slate-300 flex items-center space-x-1.5 transition';
+              const range = s.start_line && s.end_line ? `#L${s.start_line}-L${s.end_line}` : '';
+              chip.innerHTML = `<span class="text-emerald-400 text-[10px]">#${idx+1}</span> <span>${s.file_path}${range}</span>`;
+              chip.addEventListener('click', () => openCodeModal(s));
+              citationsList.appendChild(chip);
+            });
+          }
         }
 
       } catch (err) {
@@ -435,11 +612,22 @@
 
     // Code Modal
     function openCodeModal(chunk) {
-      modalFilePath.textContent = chunk.file_path;
-      modalLines.textContent = `#L${chunk.start_line}-L${chunk.end_line}`;
-      modalCode.textContent = chunk.content;
-      modalScore.textContent = `Relevance Score: ${chunk.score ? chunk.score.toFixed(4) : 'N/A'}`;
-      hljs.highlightElement(modalCode);
+      modalFilePath.textContent = chunk.file_path || 'unknown';
+      modalLines.textContent = (chunk.start_line && chunk.end_line) ? `#L${chunk.start_line}-L${chunk.end_line}` : '';
+      const snippet = chunk.content || chunk.citation || '// Snippet not available';
+      modalCode.textContent = snippet;
+
+      const lang = getLanguageFromPath(chunk.file_path);
+      modalCode.className = `hljs language-${lang}`;
+      delete modalCode.dataset.highlighted;
+      try {
+        hljs.highlightElement(modalCode);
+      } catch (e) {
+        // Fallback without special syntax rules
+      }
+
+      const scoreText = typeof chunk.score === 'number' ? `Relevance Score: ${chunk.score.toFixed(4)}` : 'Verified Grounded Citation';
+      modalScore.textContent = scoreText;
       codeModal.classList.remove('hidden');
     }
 
@@ -447,17 +635,22 @@
     codeModal.addEventListener('click', (e) => {
       if (e.target === codeModal) codeModal.classList.add('hidden');
     });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !codeModal.classList.contains('hidden')) {
+        codeModal.classList.add('hidden');
+      }
+    });
 
     // Copy handlers
-    copyBtn.addEventListener('click', () => {
+    copyBtn.addEventListener('click', async () => {
       if (!currentResponseData) return;
-      navigator.clipboard.writeText(currentResponseData.answer);
+      await copyToClipboard(currentResponseData.answer);
       copyBtn.innerHTML = '<span>✅</span><span>Copied!</span>';
       setTimeout(() => { copyBtn.innerHTML = '<span>📋</span><span>Copy Markdown</span>'; }, 2000);
     });
 
-    modalCopyCode.addEventListener('click', () => {
-      navigator.clipboard.writeText(modalCode.textContent);
+    modalCopyCode.addEventListener('click', async () => {
+      await copyToClipboard(modalCode.textContent);
       modalCopyCode.textContent = 'Copied!';
       setTimeout(() => { modalCopyCode.textContent = 'Copy Snippet'; }, 2000);
     });

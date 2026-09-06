@@ -1,9 +1,9 @@
 [project]
 name = "aeia"
 version = "0.4.0"
-description = "Add your description here"
+description = "AI Engineering Intelligence Assistant — Agentic RAG code intelligence system for the Campus Connect codebase."
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.141.1",
     "fastembed>=0.8.0",
@@ -29,9 +29,17 @@ dependencies = [
 dev = [
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
+    "ruff>=0.11.0",
+    "pytest-cov>=6.0",
 ]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
 
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]

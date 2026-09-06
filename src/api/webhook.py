@@ -82,10 +82,14 @@ async def handle_github_webhook(request: Request):
             },
         )
 
-    # ── Git pull ──────────────────────────────────────────────────────────
+    # ── Git pull (run in executor to avoid blocking the event loop) ────
+    import asyncio
     from src.ingestion.git_sync import pull_corpus
 
-    pull_result = pull_corpus(settings.corpus_path, branch="main")
+    loop = asyncio.get_running_loop()
+    pull_result = await loop.run_in_executor(
+        None, pull_corpus, settings.corpus_path, "main"
+    )
 
     if pull_result.error:
         raise HTTPException(

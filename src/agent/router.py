@@ -27,9 +27,9 @@ def classify_route_fast(question: str) -> Optional[Tuple[str, str, str]]:
     """
     q_lower = question.lower().strip()
 
-    # 1. Check for specific commit hash (4 to 40 hex chars)
+    # 1. Check for specific commit hash (6 to 40 hex chars, must contain at least one digit)
     commit_match = re.search(r"\b([0-9a-fA-F]{6,40})\b", question)
-    if commit_match and any(w in q_lower for w in ["commit", "diff", "changed in", "show"]):
+    if commit_match and any(c.isdigit() for c in commit_match.group(1)) and any(w in q_lower for w in ["commit", "diff", "changed in", "show"]):
         commit_hash = commit_match.group(1)
         return (
             "git_commit",
@@ -76,6 +76,7 @@ def classify_route_llm(question: str) -> Tuple[str, str, str]:
             config=types.GenerateContentConfig(
                 system_instruction=ROUTER_SYSTEM_PROMPT,
                 temperature=0.0,
+                automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
             ),
         )
         text = response.text or ""

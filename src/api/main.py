@@ -2,10 +2,11 @@ import time
 from contextlib import asynccontextmanager
 from typing import List, Optional
 
+import json
 from pathlib import Path
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from google.genai.errors import APIError
 from pydantic import BaseModel, Field
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -121,7 +122,28 @@ async def google_api_error_handler(request: Request, exc: APIError):
 
 
 # Mount Model Context Protocol (MCP) Streamable HTTP endpoint (2026-07-28 spec)
-app.mount("/mcp", get_streamable_http_app())
+# Mount MCP with API key authentication middleware
+from starlette.middleware import Middleware
+from starlette.responses import JSONResponse as StarletteJSONResponse
+
+_mcp_app = get_streamable_http_app()
+_original_mcp_app_call = _mcp_app.__call__
+
+async def _authenticated_mcp(scope, receive, send):
+    """ASGI middleware that enforces X-API-Key on the MCP mount."""
+    if scope["type"] == "http":
+        headers = dict((k.decode(), v.decode()) for k, v in scope.get("headers", []))
+        api_key = headers.get("x-api-key", "")
+        if api_key != settings.api_key:
+            response = StarletteJSONResponse(
+                status_code=401,
+                content={"error": "Unauthorized", "message": "Invalid or missing API key for MCP endpoint."},
+            )
+            await response(scope, receive, send)
+            return
+    await _original_mcp_app_call(scope, receive, send)
+
+app.mount("/mcp", _authenticated_mcp)
 
 app.add_middleware(
     CORSMiddleware,
@@ -167,6 +189,10 @@ class AskRequest(BaseModel):
     session_id: Optional[str] = Field(
         default=None,
         description="Optional session ID to maintain multi-turn conversational history",
+    )
+    stream: bool = Field(
+        default=False,
+        description="Stream response tokens via Server-Sent Events (SSE)",
     )
 
 
@@ -215,6 +241,7 @@ class HealthResponse(BaseModel):
     status: str
     collection: str
     points_indexed: int
+    indexed_points: Optional[int] = None
     qdrant_url: str
 
 
@@ -270,10 +297,12 @@ async def health_check():
 
     try:
         collection_info = retriever.client.get_collection(settings.collection_name)
+        points = collection_info.points_count or 0
         return HealthResponse(
             status="healthy",
             collection=settings.collection_name,
-            points_indexed=collection_info.points_count or 0,
+            points_indexed=points,
+            indexed_points=points,
             qdrant_url=settings.qdrant_url,
         )
     except Exception as e:
@@ -281,6 +310,52 @@ async def health_check():
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Qdrant connection error: {str(e)}",
         )
+
+
+def _stream_ask_response(
+    request: Request,
+    body: AskRequest,
+    search_query: str,
+    session_id: str,
+    session_mem: Any,
+    retriever: Retriever,
+    generator: AnswerGenerator,
+):
+    start_time = time.time()
+    chunks = retriever.retrieve(search_query, top_k=body.top_k)
+
+    def event_generator():
+        full_answer = []
+        try:
+            for event in generator.generate_stream(search_query, chunks, history=session_mem.get_history()):
+                if event["type"] == "sources":
+                    payload = {
+                        "type": "sources",
+                        "sources": event["sources"],
+                        "session_id": session_id,
+                        "rewritten_question": search_query if search_query != body.question else None,
+                    }
+                    yield f"data: {json.dumps(payload)}\n\n"
+                elif event["type"] == "token":
+                    full_answer.append(event["text"])
+                    yield f"data: {json.dumps({'type': 'token', 'text': event['text']})}\n\n"
+                elif event["type"] == "done":
+                    latency_ms = round((time.time() - start_time) * 1000, 2)
+                    final_text = "".join(full_answer)
+                    session_mem.add_turn(body.question, final_text)
+                    yield f"data: {json.dumps({'type': 'done', 'latency_ms': latency_ms, 'session_id': session_id})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -312,6 +387,18 @@ async def ask_question(request: Request, body: AskRequest):
     client = generator.client if generator else None
     search_query = rewrite_query_with_history(body.question, history, client=client)
 
+    # If client requested Server-Sent Events (SSE) streaming
+    if body.stream or "text/event-stream" in request.headers.get("accept", ""):
+        return _stream_ask_response(
+            request=request,
+            body=body,
+            search_query=search_query,
+            session_id=session_id,
+            session_mem=session_mem,
+            retriever=retriever,
+            generator=generator,
+        )
+
     try:
         if body.use_agent and agent:
             final_state = agent.invoke({
@@ -325,6 +412,8 @@ async def ask_question(request: Request, body: AskRequest):
                     start_line=s.get("start_line", 1),
                     end_line=s.get("end_line", 1),
                     citation=s.get("citation", "agent-source"),
+                    content=s.get("content"),
+                    score=s.get("score"),
                 )
                 for s in final_state.get("sources", [])
             ]
@@ -358,6 +447,18 @@ async def ask_question(request: Request, body: AskRequest):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error processing question: {str(e)}",
         )
+
+
+@app.post(
+    "/ask/stream",
+    tags=["RAG"],
+    dependencies=[Depends(verify_api_key)],
+)
+@limiter.limit(settings.rate_limit)
+async def ask_question_stream(request: Request, body: AskRequest):
+    """Dedicated Server-Sent Events (SSE) streaming endpoint."""
+    body.stream = True
+    return await ask_question(request, body)
 
 
 @app.post(

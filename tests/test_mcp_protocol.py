@@ -1,6 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 from src.api.main import app
+from src.config import settings
 
 
 @pytest.fixture
@@ -14,6 +15,7 @@ def test_mcp_stateless_list_tools(client):
         "MCP-Protocol-Version": "2026-07-28",
         "Mcp-Method": "tools/list",
         "Content-Type": "application/json",
+        "X-API-Key": settings.api_key,
     }
     body = {
         "jsonrpc": "2.0",
@@ -48,6 +50,7 @@ def test_mcp_stateless_call_tool(client):
         "Mcp-Method": "tools/call",
         "Mcp-Name": "get_commit_history",
         "Content-Type": "application/json",
+        "X-API-Key": settings.api_key,
     }
     body = {
         "jsonrpc": "2.0",

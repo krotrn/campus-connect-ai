@@ -256,6 +256,7 @@ PYTHONPATH=. uv run python evals/run_eval.py --generation
 
 ### Step 3: Run the Full Test Suite
 Ensure all 14 automated test suites (72 passing tests) pass without errors:
+Ensure all 15 automated test suites (76 passing tests) pass without errors:
 ```bash
 uv run pytest -v
 ```
@@ -282,6 +283,7 @@ Congratulations! You have completed the entire AEIA Developer Mastery Curriculum
 - You understand the **20 core technologies** in [01 — Technology Stack and Prerequisites](01-technology-stack-and-prerequisites.md).
 - You understand the **system architecture and design patterns** across all 15 versions in [02 — Architecture, Design & Patterns](02-architecture-design-and-patterns.md).
 - You know the purpose and critical lines of **all 82 files and 25 ADRs** in [03 — File-by-File Mastery Catalog](03-file-by-file-mastery-catalog.md).
+- You know the purpose and critical lines of **all 83 files and 26 ADRs** in [03 — File-by-File Mastery Catalog](03-file-by-file-mastery-catalog.md).
 - You know how to build the complete system **from scratch in 18 days** in [04 — Step-by-Step Build Curriculum](04-step-by-step-build-curriculum.md).
 - You know how to **measure retrieval metrics, evaluate the RAG Triad, and contribute changes** in this guide.
 

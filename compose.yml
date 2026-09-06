@@ -26,9 +26,13 @@ services:
       - QDRANT_URL=http://qdrant:6333
       - COLLECTION_NAME=campus_connect
       - GEMINI_API_KEY=${GEMINI_API_KEY}
-    volumes:
-      - ./qdrant_data:/qdrant_data:ro
     depends_on:
       qdrant:
         condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s

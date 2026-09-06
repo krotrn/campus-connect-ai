@@ -232,12 +232,17 @@ class CodeAwareChunker:
             file_type = "config"
 
         # Apply fallback line finding
+        # Use the original full_text (without prefix) for line number lookup
         chunks: List[CodeChunk] = []
         search_pos = 0
         for i, text in enumerate(raw_chunks):
             if not text.strip():
                 continue
-            start_l, end_l, search_pos = self._find_line_number(full_text, text, search_pos)
+            # Strip the prefix from the chunk text before searching in original file
+            search_text = text
+            if prefix and text.startswith(prefix):
+                search_text = text[len(prefix):]
+            start_l, end_l, search_pos = self._find_line_number(full_text, search_text, search_pos)
             chunks.append(
                 CodeChunk(
                     content=text,

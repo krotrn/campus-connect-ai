@@ -35,8 +35,10 @@ mindmap
       dataset.json, run_eval.py, generation_eval.py, generation_benchmark.json
     Automated Test Suite tests/
       14 Test Suites (72 passing tests)
+      15 Test Suites (76 passing tests)
     ADRs docs/decisions/
       README.md & 25 Decision Records
+      README.md & 26 Decision Records
     Developer Guide docs/developer-guide/
       README.md & 5 Modular Manuals
     Postmortems & Data
@@ -383,6 +385,7 @@ All test suites use `pytest` and can be run simultaneously via `uv run pytest -v
 | [`../../tests/test_syntax_chunkers.py`](../../tests/test_syntax_chunkers.py) | Syntax Chunkers | Tests Tree-Sitter AST parser (TS/TSX), Prisma blocks, YAML compose services, Markdown sections, and SQL DDL. |
 | [`../../tests/test_generation_eval.py`](../../tests/test_generation_eval.py) | RAG Triad Evals | Tests LLM judge scoring, faithful vs hallucinated claim detection, and benchmark summary aggregation. |
 | [`../../tests/test_memory.py`](../../tests/test_memory.py) | Multi-Turn Memory | Tests sliding-window session management, standalone query bypass, LLM pronoun rewriting, and API integration. |
+| [`../../tests/test_stream.py`](../../tests/test_stream.py) | SSE Streaming | Tests `POST /ask/stream` and `stream=True` flag, `text/event-stream` headers, and event sequence (`sources`, `token`, `done`). |
 
 ---
 
@@ -415,6 +418,7 @@ Every major technical choice is documented as an ADR:
 - [`0023-multi-format-syntax-aware-chunking.md`](../decisions/0023-multi-format-syntax-aware-chunking.md): Multi-Format Syntax-Aware Chunking (Tree-Sitter AST & Structural Block Parsers).
 - [`0024-rag-triad-generation-evaluation.md`](../decisions/0024-rag-triad-generation-evaluation.md): Automated RAG Triad Generation Evaluation Suite.
 - [`0025-conversational-memory-and-coreference-rewriter.md`](../decisions/0025-conversational-memory-and-coreference-rewriter.md): Conversational Memory and Coreference Query Rewriter.
+- [`0026-real-time-sse-token-streaming-and-chat-sdk.md`](../decisions/0026-real-time-sse-token-streaming-and-chat-sdk.md): Real-Time Server-Sent Events (SSE) Token Streaming & Google GenAI Chat SDK Alignment.
 
 ---
 

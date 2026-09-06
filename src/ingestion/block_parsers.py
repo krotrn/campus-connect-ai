@@ -219,8 +219,9 @@ class SqlStatementParser:
             # Detect statement terminator
             if stripped.endswith(";"):
                 stmt = "\n".join(current_lines).strip()
-                # Determine statement type from first keyword
-                first_word = stripped.split()[0].upper() if stripped else "SQL"
+                # Determine statement type from the first keyword of the statement
+                first_line = current_lines[0].strip() if current_lines else ""
+                first_word = first_line.split()[0].upper() if first_line and first_line.split() else "SQL"
                 if stmt:
                     chunks.append(
                         BlockChunk(

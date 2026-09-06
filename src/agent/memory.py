@@ -78,8 +78,20 @@ class SessionMemoryManager:
         self.ttl_seconds = ttl_seconds
 
     def get_or_create(self, session_id: Optional[str] = None) -> Tuple[str, SessionMemory]:
-        """Retrieve existing session or create a new one with a fresh UUID."""
+        """Retrieve existing session or create a new one with a fresh UUID.
+
+        Also evicts expired sessions (older than ttl_seconds) to prevent memory leaks.
+        """
         with self._lock:
+            # Evict expired sessions
+            now = time.time()
+            expired = [
+                sid for sid, mem in self._sessions.items()
+                if (now - mem.last_accessed) > self.ttl_seconds
+            ]
+            for sid in expired:
+                del self._sessions[sid]
+
             if not session_id or not session_id.strip():
                 session_id = f"sess_{uuid.uuid4().hex[:12]}"
 
@@ -151,6 +163,7 @@ Rewritten Self-Contained Query:"""
                 config=types.GenerateContentConfig(
                     system_instruction=REWRITE_SYSTEM_PROMPT,
                     temperature=0.0,
+                    automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
                 ),
             )
             rewritten = (resp.text or "").strip()

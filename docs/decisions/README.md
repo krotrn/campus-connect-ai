@@ -29,3 +29,4 @@ This directory documents the key architectural and technical decisions made for 
 | [0023](0023-multi-format-syntax-aware-chunking.md) | Multi-Format Syntax-Aware Chunking (Tree-Sitter AST & Structural Block Parsers) | Accepted | 2026-09-06 |
 | [0024](0024-rag-triad-generation-evaluation.md) | Automated RAG Triad Generation Evaluation Suite | Accepted | 2026-09-06 |
 | [0025](0025-conversational-memory-and-coreference-rewriter.md) | Multi-Turn Conversational Memory & Coreference Query Rewriting | Accepted | 2026-09-06 |
+| [0026](0026-real-time-sse-token-streaming-and-chat-sdk.md) | Real-Time Server-Sent Events (SSE) Token Streaming & Chat SDK Alignment | Accepted | 2026-09-06 |

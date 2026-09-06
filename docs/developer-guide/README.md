@@ -54,6 +54,7 @@ flowchart TD
 | [**01 — Technology Stack & Prerequisites**](01-technology-stack-and-prerequisites.md) | Comprehensive reference for all 20 core technologies, tools, libraries, algorithms, and theoretical concepts used in AEIA. | *"What technologies do I need to learn, and what hands-on exercises should I build first?"* |
 | [**02 — Architecture, Design & Patterns**](02-architecture-design-and-patterns.md) | Deep exploration of the 15 evolutionary versions (V1–V15), software patterns, data flows, and error mitigation strategies. | *"How do the components connect together, and why was the system designed this way?"* |
 | [**03 — File-by-File Mastery Catalog**](03-file-by-file-mastery-catalog.md) | Comprehensive line-by-line inspection of all repository files, test suites, and 25 ADRs. | *"What does this line do, why is it here, and how do I safely edit or improve this file?"* |
+| [**03 — File-by-File Mastery Catalog**](03-file-by-file-mastery-catalog.md) | Comprehensive line-by-line inspection of all repository files, test suites, and 26 ADRs. | *"What does this line do, why is it here, and how do I safely edit or improve this file?"* |
 | [**04 — Step-by-Step Build Curriculum**](04-step-by-step-build-curriculum.md) | Structured 18-day interactive learning roadmap with concrete coding exercises from blank slate to production. | *"How do I build this entire system on my own from scratch?"* |
 | [**05 — Benchmarking, Evaluation & Contributing**](05-benchmarking-evaluation-and-contributing.md) | Explains retrieval metrics (Recall@K, MRR), the RAG Triad generation evaluation suite, CI automation, and contribution rules. | *"How do I verify my changes without regressing retrieval or generation performance?"* |
 
@@ -132,6 +133,8 @@ flowchart TD
     Root --> Evals["<b>Evaluations (evals/)</b><br/><code>dataset.json, run_eval.py, generation_eval.py</code>"]
     Root --> Tests["<b>Test Suites (tests/)</b><br/><code>14 test modules (72 automated unit & integration tests)</code>"]
     Root --> Docs["<b>Documentation (docs/)</b><br/><code>decisions/ (25 ADRs), postmortems/, developer-guide/</code>"]
+    Root --> Tests["<b>Test Suites (tests/)</b><br/><code>15 test modules (76 automated unit & integration tests)</code>"]
+    Root --> Docs["<b>Documentation (docs/)</b><br/><code>decisions/ (26 ADRs), postmortems/, developer-guide/</code>"]
     Root --> Corpus["<b>Target Corpus (corpus/)</b><br/><code>campus-connect (~94k LOC full-stack app)</code>"]
 
     Src --> S_Ingest["<code>ingestion/</code><br/><i>chunker.py, ast_chunker.py, block_parsers.py, pipeline.py, git_sync.py</i>"]

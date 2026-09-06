@@ -1,4 +1,5 @@
 import asyncio
+import threading
 from enum import Enum
 from typing import List, Optional
 
@@ -11,6 +12,7 @@ class IngestionStatus(str, Enum):
 
 
 # In-memory state — sufficient for single-process V3
+_state_lock = threading.Lock()
 _state = {
     "status": IngestionStatus.IDLE,
     "error": None,
@@ -19,8 +21,15 @@ _state = {
 }
 
 
+def _update_state(**kwargs):
+    """Thread-safe state update."""
+    with _state_lock:
+        _state.update(kwargs)
+
+
 def get_status() -> dict:
-    return dict(_state)
+    with _state_lock:
+        return dict(_state)
 
 
 def _hot_reload_retriever():
@@ -48,8 +57,7 @@ async def trigger_ingestion() -> bool:
     if _state["status"] == IngestionStatus.RUNNING:
         return False
 
-    _state["status"] = IngestionStatus.RUNNING
-    _state["error"] = None
+    _update_state(status=IngestionStatus.RUNNING, error=None)
 
     loop = asyncio.get_event_loop()
     asyncio.ensure_future(_run_full_in_background(loop))
@@ -59,12 +67,13 @@ async def trigger_ingestion() -> bool:
 async def _run_full_in_background(loop: asyncio.AbstractEventLoop):
     try:
         result = await loop.run_in_executor(None, _sync_full_ingest)
-        _state["status"] = IngestionStatus.COMPLETED
-        _state["chunks_ingested"] = result.get("chunks", 0)
-        _state["files_processed"] = result.get("files", 0)
+        _update_state(
+            status=IngestionStatus.COMPLETED,
+            chunks_ingested=result.get("chunks", 0),
+            files_processed=result.get("files", 0),
+        )
     except Exception as e:
-        _state["status"] = IngestionStatus.FAILED
-        _state["error"] = str(e)
+        _update_state(status=IngestionStatus.FAILED, error=str(e))
 
 
 def _sync_full_ingest() -> dict:
@@ -98,8 +107,7 @@ async def trigger_incremental_ingestion(changed_files: List[str]) -> bool:
     if _state["status"] == IngestionStatus.RUNNING:
         return False
 
-    _state["status"] = IngestionStatus.RUNNING
-    _state["error"] = None
+    _update_state(status=IngestionStatus.RUNNING, error=None)
 
     loop = asyncio.get_event_loop()
     asyncio.ensure_future(_run_incremental_in_background(loop, changed_files))
@@ -112,12 +120,13 @@ async def _run_incremental_in_background(
 ):
     try:
         result = await loop.run_in_executor(None, _sync_incremental_ingest, changed_files)
-        _state["status"] = IngestionStatus.COMPLETED
-        _state["chunks_ingested"] = result.get("chunks", 0)
-        _state["files_processed"] = result.get("files", 0)
+        _update_state(
+            status=IngestionStatus.COMPLETED,
+            chunks_ingested=result.get("chunks", 0),
+            files_processed=result.get("files", 0),
+        )
     except Exception as e:
-        _state["status"] = IngestionStatus.FAILED
-        _state["error"] = str(e)
+        _update_state(status=IngestionStatus.FAILED, error=str(e))
 
 
 def _sync_incremental_ingest(changed_files: List[str]) -> dict:

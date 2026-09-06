@@ -83,7 +83,7 @@ def _traced_ask_impl(question: str, top_k: int, retriever, generator, history=No
     trace = _langfuse.trace(
         name="rag-ask",
         input={"question": question, "top_k": top_k},
-        metadata={"version": "0.2.0"},
+        metadata={"version": "0.4.0"},
     )
 
     # ── Retrieval span ────────────────────────────────────────────────────

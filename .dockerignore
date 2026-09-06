@@ -1,0 +1,13 @@
+.env
+.git
+.venv
+.cache
+.pytest_cache
+__pycache__
+qdrant_data
+corpus
+tests
+evals
+docs
+*.pyc
+*.egg-info

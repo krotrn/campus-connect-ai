@@ -4,7 +4,7 @@ import time
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-import numpy as np
+
 from fastembed import TextEmbedding
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
@@ -288,36 +288,8 @@ class IngestionPipeline:
         all_embeddings = self._get_embeddings(all_chunks)
 
         # Upload to Qdrant in batches
-        total_batches = (len(all_chunks) + BATCH_SIZE - 1) // BATCH_SIZE
-        point_id = 0
-        for b_idx in range(total_batches):
-            batch_start = b_idx * BATCH_SIZE
-            batch_end = min(batch_start + BATCH_SIZE, len(all_chunks))
-            batch_chunks = all_chunks[batch_start:batch_end]
-            batch_embeddings = all_embeddings[batch_start:batch_end]
-
-            points = []
-            for chunk, emb in zip(batch_chunks, batch_embeddings):
-                points.append(
-                    PointStruct(
-                        id=point_id,
-                        vector=emb,
-                        payload={
-                            "content": chunk.content,
-                            "file_path": chunk.file_path,
-                            "start_line": chunk.start_line,
-                            "end_line": chunk.end_line,
-                            "file_type": chunk.file_type,
-                            "chunk_index": chunk.chunk_index,
-                        },
-                    )
-                )
-                point_id += 1
-            self.client.upsert(
-                collection_name=settings.collection_name,
-                points=points,
-            )
-            print(f"Upserted batch {b_idx + 1}/{total_batches} ({len(points)} points)")
+        # Use deterministic point IDs (same as incremental ingestion) for idempotent upserts
+        self._upsert_chunks(all_chunks, all_embeddings)
 
         # Save cache after successful ingestion
         self.cache.save()

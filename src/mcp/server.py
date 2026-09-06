@@ -159,8 +159,8 @@ def get_streamable_http_app():
     Creates Starlette app speaking the 2026-07-28 stateless HTTP protocol.
     """
     sec = TransportSecuritySettings(
-        enable_dns_rebinding_protection=False,
-        allowed_hosts=["localhost", "127.0.0.1", "testserver", "*"],
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=["localhost", "127.0.0.1", "testserver"],
     )
     return mcp_server.streamable_http_app(
         streamable_http_path="/",
