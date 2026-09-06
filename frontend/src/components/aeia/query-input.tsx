@@ -26,7 +26,7 @@ export function QueryInput({
     }
   };
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const handleFormSubmit = (e: React.SubmitEvent) => {
     e.preventDefault();
     onSubmit();
   };
