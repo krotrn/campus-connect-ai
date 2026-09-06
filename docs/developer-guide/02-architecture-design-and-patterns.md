@@ -353,12 +353,26 @@ graph TD
 1. **Heuristic Evaluation**: Fast regex scans for pronouns (`it`, `this`, `that`, `they`) and follow-up markers (`what about`, `how does that`). If absent, the query is immediately passed to retrieval with zero latency overhead.
 2. **LLM Coreference Resolution**: If follow-up markers are present, Gemini rewrites the question using the last 5 turns of conversation history into a fully self-contained retrieval query.
 
-### Pattern 9: Client-Negotiated Content Delivery (Dual HTML/JSON Gateway)
-*File: [`src/api/main.py`](../../src/api/main.py#L90-L105)*
+### Pattern 9: Decoupled Web Console & Pure Headless API Gateway
+*Files: [`frontend/`](../../frontend/), [`src/api/main.py`](../../src/api/main.py)*
 
-**Problem**: Providing a web playground typically requires a separate frontend server, CORS configuration, and dedicated deployment infrastructure.
+**Problem**: Serving a single-file HTML frontend through FastAPI tightly couples UI rendering with backend CPU/memory cycles and lacks modern component state management, TypeScript type safety, and automated test frameworks.
 
-**Solution**: FastAPI inspects the HTTP `Accept` header on `GET /`. If a human browser visits the root URL (`Accept: text/html`), it redirects to `/ui` serving the interactive playground. If an automated script or monitoring tool visits (`Accept: application/json`), it returns the JSON service health status.
+**Solution**: Retire `GET /ui` (returning 404) and standardize `GET /` as a pure headless API discovery endpoint returning JSON metadata. The user interface is cleanly decoupled into an independent Next.js 16 / React 19 web console in `frontend/`, deployed at zero cost on Vercel Edge with CORS-secured communications to the FastAPI gateway ([ADR 0028](../decisions/0028-decoupled-nextjs-frontend-console.md)).
+
+### Pattern 10: Dynamic Client-Side API Key Injection & Quota Resilience
+*Files: [`src/generation/generator.py`](../../src/generation/generator.py), [`src/api/main.py`](../../src/api/main.py), [`frontend/src/components/aeia/settings-dialog.tsx`](../../frontend/src/components/aeia/settings-dialog.tsx)*
+
+**Problem**: Shared server-side Gemini API keys on Google AI Studio free tier frequently trigger `429 RESOURCE_EXHAUSTED` under concurrent usage or evaluation benchmarks, locking out all subsequent evaluators.
+
+**Solution**: `AnswerGenerator` supports dynamic per-request client instantiation via `_resolve_client(api_key)`. Clients can supply a personal Gemini API key via the `X-Gemini-API-Key` header or request body. The key is securely held in browser `localStorage`, bypassing shared server quota limits without being stored on the server. If a 429 occurs, the UI's `QuotaAlert` component presents an animated countdown timer and a 1-click retry modal ([ADR 0029](../decisions/0029-client-side-api-key-injection-and-quota-resilience.md)).
+
+### Pattern 11: Unified Streaming Protocol for RAG & Agentic Routing
+*Files: [`src/api/main.py`](../../src/api/main.py), [`frontend/src/services/aeia.service.ts`](../../frontend/src/services/aeia.service.ts)*
+
+**Problem**: Clients previously had to guess whether a query required vector search (`/ask/stream`) or non-RAG tools (`/agent/ask`), resulting in fragmented endpoints and blocking delays for tool operations.
+
+**Solution**: All streaming is unified under `POST /ask/stream`. The router state machine executes within the streaming pipeline, immediately emitting verified source citations (<50ms) and streaming text tokens whether the answer was synthesized via dense/sparse RAG or deterministic Git/AST agent tools ([ADR 0030](../decisions/0030-unified-sse-streaming-protocol-for-rag-and-agent.md)).
 
 ---
 

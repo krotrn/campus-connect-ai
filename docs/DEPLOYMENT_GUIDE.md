@@ -100,20 +100,21 @@ curl -X POST https://aeia.onrender.com/ask \
   -H "X-API-Key: your-secure-api-key" \
   -d '{"question": "Where is user authentication implemented?"}'
 
-# Open the Web UI
-# Visit: https://aeia.onrender.com/ui
+# Open the Web Console (Next.js)
+# Local: http://localhost:3000
+# Production: Deploy frontend/ to Vercel (see Vercel section below)
 ```
 
 > **Note:** Render free tier services spin down after 15 minutes of inactivity. The first request after spin-down takes ~30-60s to cold-start. This is normal for a portfolio demo.
 
 ### Render Deployment Checklist
 
-- [ ] Qdrant Cloud free cluster created
+- [ ] Qdrant Cloud free cluster created (with `QDRANT_API_KEY`)
 - [ ] Render web service created with Docker runtime
 - [ ] Environment variables configured
 - [ ] Initial ingestion completed
-- [ ] Health check passing
-- [ ] Web UI accessible at `/ui`
+- [ ] Health check passing (`GET /health`)
+- [ ] Frontend Web Console deployed on Vercel (or running locally)
 
 ---
 
@@ -244,12 +245,31 @@ docker compose up -d
 git clone https://github.com/coding-pundit-nitap/campus-connect corpus/campus-connect
 PYTHONPATH=. uv run python -m src.ingestion.pipeline
 
-# 5. Verify
+# 5. Verify backend
 curl http://localhost:8000/health
 
-# 6. Open Web UI
-# Visit: http://localhost:8000/ui
+# 6. Start the Next.js Web Console
+cd frontend && pnpm install && pnpm dev
+# Visit: http://localhost:3000
 ```
+
+---
+
+## Deploying the Frontend Console (Vercel)
+
+The AEIA Web Console (`frontend/`) is built with Next.js 16 and can be deployed at zero cost on **Vercel** with automatic HTTPS and global edge caching:
+
+1. Push your repository to GitHub.
+2. Visit [vercel.com](https://vercel.com/) and click **Add New...** → **Project**.
+3. Import your AEIA repository.
+4. In the configuration screen:
+   - **Framework Preset**: Next.js
+   - **Root Directory**: Click **Edit** and choose `frontend`.
+5. Expand **Environment Variables** and configure:
+   - `NEXT_PUBLIC_API_URL`: Your deployed backend URL (e.g. `https://aeia.onrender.com` or Railway URL).
+   - `NEXT_PUBLIC_API_KEY`: Your backend `X-API-Key` (e.g. `dev-key-change-me` or custom secret).
+6. Click **Deploy**. Vercel will build and assign an edge domain (e.g. `https://aeia-console.vercel.app`).
+7. *(Optional)* In the web console, users can open the **Settings** dialog to supply their personal Gemini API key or switch backend endpoints on the fly.
 
 ---
 
@@ -308,6 +328,7 @@ jobs:
 
 | Component | Service | Free Tier Limit | AEIA Usage |
 |-----------|---------|-----------------|------------|
+| **Web Console** | Vercel | 100GB bandwidth / Hobby | Zero cost |
 | **API Server** | Render / Railway / Fly.io | 750 hrs or $5/mo or 3 VMs | Well within limits |
 | **Vector DB** | Qdrant Cloud | 1GB / 1M vectors | ~500 vectors |
 | **LLM** | Google Gemini (AI Studio) | 1,500 req/day (Flash) | Well within limits |
@@ -325,9 +346,9 @@ jobs:
 | Issue | Cause | Fix |
 |-------|-------|-----|
 | `503 Service Unavailable` on first request | Service is cold-starting (Render free tier) | Wait 30-60s and retry |
-| `ConnectionRefusedError: Qdrant` | Qdrant URL misconfigured | Verify `QDRANT_URL` env var matches your Qdrant Cloud cluster URL |
+| `ConnectionRefusedError: Qdrant` | Qdrant URL misconfigured | Verify `QDRANT_URL` and `QDRANT_API_KEY` env vars match your Qdrant Cloud cluster |
 | `401 Unauthorized` | Missing or wrong API key | Check `X-API-Key` header matches `API_KEY` env var |
-| `429 Too Many Requests` | Gemini rate limit hit | Wait and retry; free tier has 1,500 req/day limit |
+| `429 Too Many Requests` | Gemini rate limit hit | Input personal Gemini API key in Web Console Settings dialog |
 | OOM on Fly.io | 256MB RAM insufficient for embeddings | Use Qdrant Cloud externally; reduce `--workers` to 1 |
 | Ingestion fails | Corpus not cloned | Run `git clone` for corpus first, then trigger `/ingest` |
 
@@ -351,13 +372,17 @@ docker compose logs -f api
 
 ## Recommended Setup for Portfolio Demo
 
-> **TL;DR**: Use **Render + Qdrant Cloud** — it's the fastest path to a working live demo URL.
+> **TL;DR**: Use **Render (Backend) + Vercel (Frontend) + Qdrant Cloud** — it's the fastest path to a full-stack live demo.
 
 1. **Qdrant Cloud** free tier for vector storage (persistent, no spin-down)
-2. **Render** free tier for the API (auto-deploys from GitHub)
-3. Run **initial ingestion locally** pointing at Qdrant Cloud (faster and more reliable)
-4. Add the live URL to your README as a badge:
+2. **Render** free tier for the FastAPI backend (auto-deploys from GitHub)
+3. **Vercel** free tier for the Next.js Web Console (`frontend/`)
+4. Run **initial ingestion locally** pointing at Qdrant Cloud (`QDRANT_URL` + `QDRANT_API_KEY`)
+5. Add the live demo badges to your README:
    ```markdown
-   [![Live Demo](https://img.shields.io/badge/Live_Demo-aeia.onrender.com-blue?style=for-the-badge)](https://aeia.onrender.com/ui)
+   [![Frontend Demo](https://img.shields.io/badge/Console-Vercel-black?style=for-the-badge&logo=vercel)](https://aeia-console.vercel.app)
+   [![API Docs](https://img.shields.io/badge/API-FastAPI-teal?style=for-the-badge&logo=fastapi)](https://aeia.onrender.com/docs)
    ```
-5. Add the live URL to your resume next to the project title
+6. Add the live URL to your resume next to the project title
+ADR Status Transition: ADR 0022 (0022-interactive-web-playground-ui.md) will be formally marked as Superseded by ADR 0028, documenting the architectural progression from a single-file prototype to a decoupled Next.js web console.
+

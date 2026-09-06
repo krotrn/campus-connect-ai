@@ -19,7 +19,7 @@
   - **Incremental Delta-Only Ingestion**: Re-indexes only touched files using deterministic chunk point IDs, eliminating vector DB downtime.
   - **GitHub Webhook (`POST /webhook/github`)**: Cryptographically verified HMAC-SHA256 push listener triggers instant background sync.
   - **Thread-Safe BM25 Hot-Reload**: Build-then-swap pattern ensures concurrent query threads never see incomplete index states during background ingestion.
-- **Interactive Web UI Playground (`GET /ui`)**: Single-page browser console with Markdown rendering, mode toggling (Direct RAG vs. Agent), telemetry metrics, and a slide-over code inspector drawer for verified source citations.
+- **Decoupled Next.js Web Console**: Modern, responsive Next.js 16 / React 19 / Tailwind CSS v4 console (`frontend/`) with real-time SSE streaming, interactive code inspector drawer, client-side Gemini API key injection, quota recovery alerts, and route telemetry.
 - **Multi-Format Syntax-Aware Chunking**:
   - **TypeScript/TSX**: Tree-Sitter AST parsing extracting functions, classes, interfaces, and types with JSDoc preservation.
   - **Prisma**: Structural block parsing of complete `model` and `enum` declarations with relational integrity.
@@ -39,22 +39,25 @@ docker compose up -d qdrant
 # 2. Ingest the corpus (initial run builds content-hash cache; re-runs take ~30s)
 PYTHONPATH=. uv run python -m src.ingestion.pipeline
 
-# 3. Start the API server
+# 3. Start the FastAPI backend server (port 8000)
 PYTHONPATH=. uv run uvicorn src.api.main:app --reload
 
-# 4. Ask a standard code question (Pure RAG)
+# 4. Start the Next.js Web Console (port 3000)
+cd frontend && pnpm install && pnpm dev
+
+# 5. Ask a standard code question (Pure RAG via curl)
 curl -X POST http://localhost:8000/ask \
   -H "Content-Type: application/json" \
   -H "X-API-Key: dev-key-change-me" \
   -d '{"question": "Where is user authentication implemented?"}'
 
-# 5. Query through the Agentic Layer (LangGraph Router + Tools)
+# 6. Query through the Agentic Layer (LangGraph Router + Tools)
 curl -X POST http://localhost:8000/agent/ask \
   -H "Content-Type: application/json" \
   -H "X-API-Key: dev-key-change-me" \
   -d '{"question": "Which files changed in commit 6e19f61?"}'
 
-# 6. Query module dependencies
+# 7. Query module dependencies
 curl -X POST http://localhost:8000/agent/ask \
   -H "Content-Type: application/json" \
   -H "X-API-Key: dev-key-change-me" \
@@ -137,13 +140,14 @@ flowchart TD
 ## Project Structure
 
 ```
+frontend/       Decoupled Next.js 16 Web Console (React 19, Tailwind CSS v4, shadcn/ui, Vitest, Playwright)
 src/
   agent/          LangGraph state machine, query router, non-RAG tools, conversational memory
   api/            FastAPI server (POST /ask, POST /ask/stream, POST /agent/ask, POST /ingest, POST /webhook/github, GET /health, /mcp)
   mcp/            Model Context Protocol server (2026-07-28 stateless HTTP spec)
   ingestion/      Chunker, AST chunker, block parsers, git pull syncer, delta-only + full embedding pipelines
-  retrieval/      Hybrid retriever (thread-safe BM25 + dense + weighted RRF)
-  generation/     Gemini-powered grounded answer generator (Chat SDK streaming + unary)
+  retrieval/      Hybrid retriever (thread-safe BM25 + dense + weighted RRF + file-aware ranking)
+  generation/     Gemini-powered grounded answer generator (Chat SDK streaming + unary, custom key support)
   observability/  Langfuse tracing wrapper with spans
   errors.py       Typed domain exception hierarchy
   config.py       Pydantic settings
@@ -152,12 +156,12 @@ evals/
   run_eval.py     Recall@5, Recall@10, MRR benchmark suite
   generation_eval.py RAG Triad automated evaluation suite
 docs/
-  decisions/          26 Architectural Decision Records (ADRs)
+  decisions/          31 Architectural Decision Records (ADRs)
   developer-guide/    Complete Onboarding & Codebase Mastery Curriculum
   postmortems/        Documented failure investigation case studies
-  DEPLOYMENT_GUIDE.md Free deployment guide (Render / Railway / Fly.io)
+  DEPLOYMENT_GUIDE.md Free deployment guide (Render / Railway / Fly.io / Vercel)
   RESUME_GUIDE.md     Google XYZ format resume write-up
-tests/                15 automated test suites (76 passing tests)
+tests/                16 automated test suites (including test_unified_stream.py)
 ```
 
 ---
@@ -165,7 +169,11 @@ tests/                15 automated test suites (76 passing tests)
 ## Running Tests
 
 ```bash
+# Run backend pytest suite
 uv run pytest -v
+
+# Run frontend Vitest suite
+cd frontend && pnpm test
 ```
 
 ---
@@ -195,11 +203,16 @@ Key architectural decisions are documented in [`docs/decisions/`](docs/decisions
 - [0019 — Automated Git Synchronization & Diff Tracking](docs/decisions/0019-git-corpus-sync-and-diff-tracking.md)
 - [0020 — Incremental Delta-Only Ingestion](docs/decisions/0020-incremental-delta-only-ingestion.md)
 - [0021 — GitHub Push Webhook Automation](docs/decisions/0021-github-push-webhook-automation.md)
-- [0022 — Interactive Web UI Playground](docs/decisions/0022-interactive-web-playground-ui.md)
+- [0022 — Interactive Web UI Playground (Superseded by 0028)](docs/decisions/0022-interactive-web-playground-ui.md)
 - [0023 — Multi-Format Syntax-Aware Chunking](docs/decisions/0023-multi-format-syntax-aware-chunking.md)
 - [0024 — Automated RAG Triad Generation Evaluation](docs/decisions/0024-rag-triad-generation-evaluation.md)
 - [0025 — Multi-Turn Conversational Memory](docs/decisions/0025-conversational-memory-and-coreference-rewriter.md)
 - [0026 — Real-Time Server-Sent Events (SSE) Token Streaming & Chat SDK Alignment](docs/decisions/0026-real-time-sse-token-streaming-and-chat-sdk.md)
+- [0027 — File-Aware Hybrid Retrieval Ranking](docs/decisions/0027-file-aware-hybrid-retrieval-ranking.md)
+- [0028 — Decoupled Next.js Frontend Console & Retirement of Static Single-File UI](docs/decisions/0028-decoupled-nextjs-frontend-console.md)
+- [0029 — Client-Side Dynamic API Key Injection & LLM Quota Resilience](docs/decisions/0029-client-side-api-key-injection-and-quota-resilience.md)
+- [0030 — Unified Server-Sent Events (SSE) Streaming Protocol for RAG & Agentic Routing](docs/decisions/0030-unified-sse-streaming-protocol-for-rag-and-agent.md)
+- [0031 — Modernized Python 3.12+ Type Annotation Standard & Ingestion Progress Instrumentation](docs/decisions/0031-codebase-type-modernization-and-ingestion-telemetry.md)
 
 ---
 

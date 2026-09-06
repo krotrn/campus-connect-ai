@@ -58,9 +58,9 @@ flowchart TD
     end
 
     subgraph "Phase 10: Advanced Capabilities & Live Sync (Days 15-18)"
-        D15["Day 15: Git Sync & HMAC-SHA256 Webhook"]
-        D16["Day 16: Web UI Playground & Citation Inspector"]
-        D17["Day 17: Tree-Sitter AST & Block Grammars"]
+        D15["Day 15: Automated Git Sync & Webhook Ingestion"]
+        D16["Day 16: Decoupled Next.js Web Console & Vercel"]
+        D17["Day 17: Multi-Format AST & Block Grammars"]
         D18["Day 18: RAG Triad Evals & Conversational Memory"]
     end
 
@@ -372,15 +372,16 @@ flowchart TD
   uv run pytest tests/test_incremental_ingestion.py -v
   ```
 
-### Day 16: Interactive Web UI Playground & Visual Citation Inspector
-- **Objective**: Build a zero-setup, single-page application for developers to test queries and inspect cited code directly in their browser.
+### Day 16: Decoupled Next.js 16 Web Console & Vercel Edge Deployment
+- **Objective**: Build a modern, enterprise-grade Next.js console with real-time SSE streaming, client-side API key injection, and interactive citation inspector.
 - **Action Steps**:
-  1. Create [`src/api/static/index.html`](../../src/api/static/index.html) with Tailwind CSS, Marked.js, and Highlight.js.
-  2. Implement mode switching (Direct RAG vs. Agent), interactive slide-over citation drawer for `[filepath#Lstart-Lend]`, and real-time telemetry cards ([ADR 0022](../decisions/0022-interactive-web-playground-ui.md)).
-  3. Implement content negotiation in [`src/api/main.py`](../../src/api/main.py) to serve HTML to browsers and JSON to programmatic clients on `GET /`.
+  1. Scaffold [`frontend/`](../../frontend/) with Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4, and `shadcn/ui` primitives ([ADR 0028](../decisions/0028-decoupled-nextjs-frontend-console.md)).
+  2. Implement `AnswerCard`, `CitationList`, `CodeModal`, `SettingsDialog`, `QuotaAlert`, and real-time SSE token streaming consumer ([ADR 0029](../decisions/0029-client-side-api-key-injection-and-quota-resilience.md), [ADR 0030](../decisions/0030-unified-sse-streaming-protocol-for-rag-and-agent.md)).
+  3. Update [`src/api/main.py`](../../src/api/main.py) to return standard JSON discovery metadata on `GET /` and retire legacy `GET /ui` with HTTP 404.
 - **Verification Milestone**:
   ```bash
-  uv run pytest tests/test_ui.py -v
+  uv run pytest tests/test_ui.py tests/test_unified_stream.py -v
+  cd frontend && pnpm test
   ```
 
 ### Day 17: Multi-Format AST Parsing & Structural Block Grammars

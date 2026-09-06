@@ -380,11 +380,12 @@ All test suites use `pytest` and can be run simultaneously via `uv run pytest -v
 | [`../../tests/test_mcp_tools.py`](../../tests/test_mcp_tools.py) | MCP Tools | Tests calling all 5 tools via MCP server interface and verifies output formats. |
 | [`../../tests/test_error_handling.py`](../../tests/test_error_handling.py) | Error Resilience | Tests HTTP 429 quota exception handling, Retry-After header, 503 Vector DB failure, and graceful chunk fallback. |
 | [`../../tests/test_incremental_ingestion.py`](../../tests/test_incremental_ingestion.py) | Live Sync & Webhook | Tests git sync, deterministic point IDs, HMAC-SHA256 signature verification, branch filtering, and BM25 thread safety. |
-| [`../../tests/test_ui.py`](../../tests/test_ui.py) | Web Playground | Tests `GET /ui` HTML delivery, browser redirect negotiation on `GET /`, and API client JSON responses. |
+| [`../../tests/test_ui.py`](../../tests/test_ui.py) | Web Playground & API Root | Tests `GET /ui` 404 retirement (in favor of Next.js frontend) and standard JSON service discovery on `GET /`. |
 | [`../../tests/test_syntax_chunkers.py`](../../tests/test_syntax_chunkers.py) | Syntax Chunkers | Tests Tree-Sitter AST parser (TS/TSX), Prisma blocks, YAML compose services, Markdown sections, and SQL DDL. |
 | [`../../tests/test_generation_eval.py`](../../tests/test_generation_eval.py) | RAG Triad Evals | Tests LLM judge scoring, faithful vs hallucinated claim detection, and benchmark summary aggregation. |
 | [`../../tests/test_memory.py`](../../tests/test_memory.py) | Multi-Turn Memory | Tests sliding-window session management, standalone query bypass, LLM pronoun rewriting, and API integration. |
 | [`../../tests/test_stream.py`](../../tests/test_stream.py) | SSE Streaming | Tests `POST /ask/stream` and `stream=True` flag, `text/event-stream` headers, and event sequence (`sources`, `token`, `done`). |
+| [`../../tests/test_unified_stream.py`](../../tests/test_unified_stream.py) | Unified Stream Routing | Tests unified streaming across `direct_rag`, `git_commit`, and `file_dependents` routes under a single SSE contract. |
 
 ---
 
@@ -413,29 +414,51 @@ Every major technical choice is documented as an ADR:
 - [`0019-git-corpus-sync-and-diff-tracking.md`](../decisions/0019-git-corpus-sync-and-diff-tracking.md): Automated Git Synchronization and Diff Tracking.
 - [`0020-incremental-delta-only-ingestion.md`](../decisions/0020-incremental-delta-only-ingestion.md): Incremental Delta-Only Ingestion with Deterministic Point IDs.
 - [`0021-github-push-webhook-automation.md`](../decisions/0021-github-push-webhook-automation.md): GitHub Push Webhook Automation with HMAC-SHA256 Authentication.
-- [`0022-interactive-web-playground-ui.md`](../decisions/0022-interactive-web-playground-ui.md): Interactive Web UI Playground & Visual Citation Inspector.
+- [`0022-interactive-web-playground-ui.md`](../decisions/0022-interactive-web-playground-ui.md): Interactive Web UI Playground (Superseded by 0028).
 - [`0023-multi-format-syntax-aware-chunking.md`](../decisions/0023-multi-format-syntax-aware-chunking.md): Multi-Format Syntax-Aware Chunking (Tree-Sitter AST & Structural Block Parsers).
 - [`0024-rag-triad-generation-evaluation.md`](../decisions/0024-rag-triad-generation-evaluation.md): Automated RAG Triad Generation Evaluation Suite.
 - [`0025-conversational-memory-and-coreference-rewriter.md`](../decisions/0025-conversational-memory-and-coreference-rewriter.md): Conversational Memory and Coreference Query Rewriter.
 - [`0026-real-time-sse-token-streaming-and-chat-sdk.md`](../decisions/0026-real-time-sse-token-streaming-and-chat-sdk.md): Real-Time Server-Sent Events (SSE) Token Streaming & Google GenAI Chat SDK Alignment.
+- [`0027-file-aware-hybrid-retrieval-ranking.md`](../decisions/0027-file-aware-hybrid-retrieval-ranking.md): File-Aware Hybrid Retrieval Ranking (Candidate expansion & file-level aggregation).
+- [`0028-decoupled-nextjs-frontend-console.md`](../decisions/0028-decoupled-nextjs-frontend-console.md): Decoupled Next.js Frontend Console & Retirement of Static Single-File UI.
+- [`0029-client-side-api-key-injection-and-quota-resilience.md`](../decisions/0029-client-side-api-key-injection-and-quota-resilience.md): Client-Side Dynamic API Key Injection & LLM Quota Resilience.
+- [`0030-unified-sse-streaming-protocol-for-rag-and-agent.md`](../decisions/0030-unified-sse-streaming-protocol-for-rag-and-agent.md): Unified Server-Sent Events (SSE) Streaming Protocol for RAG & Agentic Routing.
+- [`0031-codebase-type-modernization-and-ingestion-telemetry.md`](../decisions/0031-codebase-type-modernization-and-ingestion-telemetry.md): Modernized Python 3.12+ Type Annotation Standard & Ingestion Progress Instrumentation.
 
 ---
 
-## 7. Postmortems & Data Context
+## 7. Frontend Console Anatomy (`frontend/`)
 
-### 7.1 `docs/postmortems/001-semantic-bias-config-retrieval.md`
+The AEIA Web Console is an independent Next.js 16 (App Router) / React 19 application:
+
+| File / Component | Role & Functionality |
+| :--- | :--- |
+| [`frontend/src/app/page.tsx`](../../frontend/src/app/page.tsx) | Main interactive console orchestrating question submission, streaming response accumulation, citations state, and quota alert bindings. |
+| [`frontend/src/components/aeia/answer-card.tsx`](../../frontend/src/components/aeia/answer-card.tsx) | Renders token-by-token streaming markdown with syntax highlighting, copy-to-clipboard, and citation chips. |
+| [`frontend/src/components/aeia/citation-list.tsx`](../../frontend/src/components/aeia/citation-list.tsx) | Grid of verified citation badges displaying relative paths, `#L` line numbers, and RRF relevance scores. |
+| [`frontend/src/components/aeia/code-modal.tsx`](../../frontend/src/components/aeia/code-modal.tsx) | Slide-over drawer rendering the exact retrieved source chunk with line numbers for grounding verification. |
+| [`frontend/src/components/aeia/settings-dialog.tsx`](../../frontend/src/components/aeia/settings-dialog.tsx) | Modal for setting custom API URL, backend auth key, and client-provided Gemini API key (persisted in `localStorage`). |
+| [`frontend/src/components/aeia/quota-alert.tsx`](../../frontend/src/components/aeia/quota-alert.tsx) | Alert banner triggered on HTTP 429 quota exhaustion with animated countdown and 1-click retry. |
+| [`frontend/src/components/aeia/telemetry-bar.tsx`](../../frontend/src/components/aeia/telemetry-bar.tsx) | Displays route audit (`direct_rag`, `git_commit`, etc.), latency metrics, and citation counts. |
+| [`frontend/src/services/aeia.service.ts`](../../frontend/src/services/aeia.service.ts) | Resilient SSE stream consumer parsing `sources`, `token`, `done`, and `error` events. |
+
+---
+
+## 8. Postmortems & Data Context
+
+### 8.1 `docs/postmortems/001-semantic-bias-config-retrieval.md`
 - **Relative Path**: [`../postmortems/001-semantic-bias-config-retrieval.md`](../postmortems/001-semantic-bias-config-retrieval.md)
 - **Role**: In-depth incident postmortem documenting why config files were missed during V1 retrieval, how cross-encoders failed, and how semantic prefix injection permanently solved the issue. Must-read for any search engineer.
 
-### 7.2 `corpus/campus-connect/`
+### 8.2 `corpus/campus-connect/`
 - **Relative Path**: [`../../corpus/campus-connect/`](../../corpus/campus-connect/)
 - **Role**: The target full-stack web application (~94k LOC) indexed by AEIA. Contains real-world TypeScript, Next.js App Router, Prisma schemas, SQL migrations, Docker Compose definitions, and documentation.
 
-### 7.3 `qdrant_data/`
+### 8.3 `qdrant_data/`
 - **Relative Path**: [`../../qdrant_data/`](../../qdrant_data/)
 - **Role**: On-disk storage volume mounted by Qdrant to persist HNSW vector indices and payloads across container restarts.
 
 ---
 
-Proceed to **[04 — Step-by-Step Build Curriculum](04-step-by-step-build-curriculum.md)** for a 14-day zero-to-production implementation roadmap.
+Proceed to **[04 — Step-by-Step Build Curriculum](04-step-by-step-build-curriculum.md)** for a zero-to-production implementation roadmap.
 

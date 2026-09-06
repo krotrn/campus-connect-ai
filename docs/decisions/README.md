@@ -25,9 +25,13 @@ This directory documents the key architectural and technical decisions made for 
 | [0019](0019-git-corpus-sync-and-diff-tracking.md) | Automated Git Synchronization and Diff Tracking | Accepted | 2026-09-06 |
 | [0020](0020-incremental-delta-only-ingestion.md) | Incremental Delta-Only Ingestion with Deterministic Point IDs | Accepted | 2026-09-06 |
 | [0021](0021-github-push-webhook-automation.md) | GitHub Push Webhook Automation with HMAC-SHA256 Authentication | Accepted | 2026-09-06 |
-| [0022](0022-interactive-web-playground-ui.md) | Interactive Web UI Playground & Visual Citation Inspector | Accepted | 2026-09-06 |
+| [0022](0022-interactive-web-playground-ui.md) | Interactive Web UI Playground & Visual Citation Inspector | Superseded | 2026-09-06 |
 | [0023](0023-multi-format-syntax-aware-chunking.md) | Multi-Format Syntax-Aware Chunking (Tree-Sitter AST & Structural Block Parsers) | Accepted | 2026-09-06 |
 | [0024](0024-rag-triad-generation-evaluation.md) | Automated RAG Triad Generation Evaluation Suite | Accepted | 2026-09-06 |
 | [0025](0025-conversational-memory-and-coreference-rewriter.md) | Multi-Turn Conversational Memory & Coreference Query Rewriting | Accepted | 2026-09-06 |
 | [0026](0026-real-time-sse-token-streaming-and-chat-sdk.md) | Real-Time Server-Sent Events (SSE) Token Streaming & Chat SDK Alignment | Accepted | 2026-09-06 |
 | [0027](0027-file-aware-hybrid-retrieval-ranking.md) | File-Aware Hybrid Retrieval Ranking | Accepted | 2026-09-06 |
+| [0028](0028-decoupled-nextjs-frontend-console.md) | Decoupled Next.js Frontend Console & Retirement of Static Single-File UI | Accepted | 2026-09-07 |
+| [0029](0029-client-side-api-key-injection-and-quota-resilience.md) | Client-Side Dynamic API Key Injection & LLM Quota Resilience | Accepted | 2026-09-07 |
+| [0030](0030-unified-sse-streaming-protocol-for-rag-and-agent.md) | Unified Server-Sent Events (SSE) Streaming Protocol for RAG & Agentic Routing | Accepted | 2026-09-07 |
+| [0031](0031-codebase-type-modernization-and-ingestion-telemetry.md) | Modernized Python 3.12+ Type Annotation Standard & Ingestion Progress Instrumentation | Accepted | 2026-09-07 |

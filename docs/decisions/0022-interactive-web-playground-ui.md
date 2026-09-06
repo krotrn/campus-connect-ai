@@ -1,7 +1,7 @@
 # ADR 0022: Interactive Web UI Playground & Visual Citation Inspector
 
 ## Status
-Accepted
+Superseded by [ADR 0028](0028-decoupled-nextjs-frontend-console.md) (The single-file HTML playground was retired in favor of a modern, decoupled Next.js console in `frontend/`)
 
 ## Date
 2026-09-06

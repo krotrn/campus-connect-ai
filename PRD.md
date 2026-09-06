@@ -170,36 +170,36 @@ Minimum 20–30 items across all 7 use case categories in Section 5 before V2 me
 - [ ] One working MCP server integration
 - [ ] One working agentic router with at least one tool call
 
-## 11. Repository Structure (Target)
+## 11. Repository Structure (Current)
 
 ```
 README.md
+frontend/         # Decoupled Next.js 16 Web Console (React 19, Tailwind CSS v4, shadcn/ui)
 src/
-  ingestion/
-  retrieval/
-  generation/
-  agents/
-  mcp/
-  api/
-tests/
+  ingestion/      # Chunkers, AST parsers, git sync, embedding pipeline
+  retrieval/      # Thread-safe BM25 + dense Qdrant retriever + file-aware ranking
+  generation/     # Grounded answer synthesis (SSE streaming, custom API key resolution)
+  agent/          # LangGraph state machine router, deterministic tools, session memory
+  mcp/            # Model Context Protocol server (2026-07-28 stateless HTTP spec)
+  api/            # FastAPI REST & SSE Gateway (pure headless API)
+tests/            # 16 automated test suites (pytest)
 evals/
-  dataset.json
-  run_eval.py
-docker/
+  dataset.json    # Golden evaluation test cases
+  run_eval.py     # Retrieval benchmark
+  generation_eval.py # RAG Triad benchmark
 docs/
-  architecture.md
-  decisions/        # short ADRs for major choices
-.github/workflows/
-  eval-ci.yml
+  decisions/      # 31 Architecture Decision Records (ADRs 0001-0031)
+  developer-guide/# Comprehensive onboarding curriculum
 ```
 
 ## 12. Architectural Decisions & Open Questions
 
 ### Resolved Decisions
 1. **Corpus**: `coding-pundit-nitap/campus-connect` (See [ADR 0001](docs/decisions/0001-target-corpus.md)).
-2. **Local Environment**: `uv` package manager with Python 3.12 (See [ADR 0004](docs/decisions/0004-python-toolchain-uv.md)).
-3. **Vector DB & Embeddings**: Qdrant (Docker) + FastEmbed `BAAI/bge-small-en-v1.5` for local zero-cost embeddings (See [ADR 0002](docs/decisions/0002-zero-cost-embedding-and-vector-db.md)).
-4. **LLM Provider**: Google Gemini 2.0 Flash / 1.5 Flash via Google AI Studio free tier (See [ADR 0003](docs/decisions/0003-llm-provider-gemini.md)).
+2. **Local Environment**: `uv` package manager with Python 3.12 (See [ADR 0004](docs/decisions/0004-python-toolchain-uv.md), [ADR 0031](docs/decisions/0031-codebase-type-modernization-and-ingestion-telemetry.md)).
+3. **Vector DB & Embeddings**: Qdrant (Docker / Cloud) + FastEmbed `BAAI/bge-small-en-v1.5` for local zero-cost embeddings (See [ADR 0002](docs/decisions/0002-zero-cost-embedding-and-vector-db.md)).
+4. **LLM Provider**: Google Gemini 2.0 Flash / 3.6 Flash via Google AI Studio free tier with client-side key override (See [ADR 0003](docs/decisions/0003-llm-provider-gemini.md), [ADR 0029](docs/decisions/0029-client-side-api-key-injection-and-quota-resilience.md)).
+5. **Frontend Architecture**: Decoupled Next.js 16 web console deployed on Vercel with unified SSE streaming (See [ADR 0028](docs/decisions/0028-decoupled-nextjs-frontend-console.md), [ADR 0030](docs/decisions/0030-unified-sse-streaming-protocol-for-rag-and-agent.md)).
 
 ### Open Questions (deferred to V3/V4)
 1. Deployment target for the live instance — Railway, Fly.io, Render, or a VPS?

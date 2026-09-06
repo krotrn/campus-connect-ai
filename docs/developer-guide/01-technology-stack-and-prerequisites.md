@@ -39,25 +39,25 @@ graph TD
         Tools["Safe Subprocess Tools (Git Log, Git Show, Import Scanner)"]
     end
 
-    subgraph "4. Service, Protocol & UI Layer"
-        FA["FastAPI & Uvicorn (ASGI Web Framework)"]
+    subgraph "4. Service, Protocol & Frontend Console"
+        FA["FastAPI & Uvicorn (Pure Headless ASGI Gateway)"]
         Pyd["Pydantic V2 & Pydantic Settings"]
         MCP["Model Context Protocol (MCP 2026-07-28 Spec)"]
         Sec["SlowAPI Rate Limiter & HMAC-SHA256 Auth"]
-        UI["Interactive Web UI Playground (Marked.js, Highlight.js)"]
+        Next["Next.js 16 Web Console (React 19, Tailwind v4, shadcn/ui)"]
     end
 
     subgraph "5. Operations, Tracing & Quality"
         LF["Langfuse (Distributed LLM Observability & Spans)"]
         Triad["RAG Triad LLM-as-a-Judge (Faithfulness, Relevance, Precision)"]
         Docker["Docker & Compose (Containerized Topology)"]
-        Test["Pytest (14 Suites, 72 Passing Tests) & CI"]
+        Test["Pytest & Vitest (16 Backend Suites + Frontend Tests)"]
     end
 
     Py --> TS_AST & FE & QD & BM & RRF
     TS_AST & FE & QD & BM & RRF --> FA
     Gemini & Mem & Rewrite & LG & Tools --> FA
-    FA --> MCP & Sec & UI
+    FA --> MCP & Sec & Next
     FA --> LF
     Triad --> Gemini
     Docker --> QD & FA
@@ -781,19 +781,22 @@ Traditional RAG benchmarks only measure retrieval metrics (Recall@K, MRR). They 
 
 ---
 
-## 20. Interactive Web UI Playground & Visual Citation Inspector
+## 20. Decoupled Next.js 16 Web Console & Vercel Edge
 
-### Why We Use It ([ADR 0022](../decisions/0022-interactive-web-playground-ui.md))
-A high-throughput API benefits from an immediate, zero-friction graphical playground for manual inspection, debugging, and live demonstrations:
-- **Zero-Build Single-Page Application**: Served directly from FastAPI at `src/api/static/index.html` via Tailwind CSS, Marked.js, and Highlight.js (no Node.js build step required).
-- **Slide-Over Citation Inspector**: Clicking markdown citations (`[src/auth/jwt.ts#L1-L35]`) opens an interactive slide-over drawer rendering the exact source lines with syntax highlighting.
-- **Real-Time Telemetry & Session Management**: Displays retrieval scores, processing latencies, step audits, and provides instant "New Chat" session resets.
-- **Content Negotiation**: Human browsers requesting `GET /` receive the interactive UI, while API clients receive standard JSON service health payloads.
+### Why We Use It ([ADR 0028](../decisions/0028-decoupled-nextjs-frontend-console.md), superseding [ADR 0022](../decisions/0022-interactive-web-playground-ui.md))
+To provide a production-grade, responsive developer console without burdening the Python backend with static asset serving:
+- **Decoupled Architecture**: Built with Next.js 16 (App Router), React 19, TypeScript, and Tailwind CSS v4. Deployable on Vercel at zero cost.
+- **Unified SSE Streaming**: Real-time token streaming across both Direct Hybrid RAG and LangGraph agent tool executions ([ADR 0030](../decisions/0030-unified-sse-streaming-protocol-for-rag-and-agent.md)).
+- **Interactive Code Modal Inspector**: Clicking citation chips opens a slide-over modal displaying syntax-highlighted code chunks with line ranges and relevance scores.
+- **Client-Side Quota Resilience**: In-app Settings modal for custom Gemini API key overrides and animated countdown alerts on HTTP 429 quota exhaustion ([ADR 0029](../decisions/0029-client-side-api-key-injection-and-quota-resilience.md)).
+- **Headless API Cleanliness**: FastAPI serves strictly as a high-performance REST and SSE gateway; `GET /` returns JSON discovery metadata, and `GET /ui` is retired with HTTP 404.
 
 ### Relevant Codebase Files
-- [`src/api/static/index.html`](../../src/api/static/index.html)
-- [`src/api/main.py`](../../src/api/main.py#L90-L105)
-- [`tests/test_ui.py`](../../tests/test_ui.py)
+- [`frontend/src/app/page.tsx`](../../frontend/src/app/page.tsx) (Main console interface)
+- [`frontend/src/components/aeia/`](../../frontend/src/components/aeia/) (AnswerCard, CitationList, CodeModal, QuotaAlert, SettingsDialog)
+- [`frontend/src/services/aeia.service.ts`](../../frontend/src/services/aeia.service.ts) (SSE consumer)
+- [`src/api/main.py`](../../src/api/main.py) (Headless endpoints and CORS configuration)
+- [`tests/test_ui.py`](../../tests/test_ui.py) (Verifies 404 retirement of legacy `/ui`)
 
 ---
 
@@ -806,6 +809,7 @@ Before modifying AEIA, make sure you have:
 4. [ ] Compiled a LangGraph `StateGraph` with conditional routing and multi-turn session memory.
 5. [ ] Inspected Tree-Sitter AST node trees for TypeScript code blocks and verified leading comment binding.
 6. [ ] Executed `uv run python evals/run_eval.py --generation` to evaluate retrieval and the RAG Triad.
-7. [ ] Run `uv run pytest -v` locally and verified all 15 test suites (76 tests) pass cleanly.
+7. [ ] Run `uv run pytest -v` locally and verified all 16 test suites pass cleanly.
+8. [ ] Executed `cd frontend && pnpm test` to verify Vitest frontend test coverage.
 
-Proceed to **[02 — Architecture, Design & Patterns](02-architecture-design-and-patterns.md)** to learn how these 20 technologies are structured into AEIA's complete software architecture.
+Proceed to **[02 — Architecture, Design & Patterns](02-architecture-design-and-patterns.md)** to learn how these technologies are structured into AEIA's complete software architecture.
