@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List
 
 from langchain_text_splitters import (
     Language,
@@ -121,7 +120,7 @@ class CodeAwareChunker:
 
         return ""
 
-    def chunk_file(self, file_path: Path, rel_path: str) -> List[CodeChunk]:
+    def chunk_file(self, file_path: Path, rel_path: str) -> list[CodeChunk]:
         try:
             full_text = file_path.read_text(encoding="utf-8", errors="ignore")
         except Exception:
@@ -234,7 +233,7 @@ class CodeAwareChunker:
 
         # Apply fallback line finding
         # Use the original full_text (without prefix) for line number lookup
-        chunks: List[CodeChunk] = []
+        chunks: list[CodeChunk] = []
         search_pos = 0
         for i, text in enumerate(raw_chunks):
             if not text.strip():

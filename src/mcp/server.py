@@ -1,6 +1,5 @@
 import asyncio
 import sys
-from typing import Optional
 
 from mcp.server import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
@@ -24,8 +23,8 @@ ALLOWED_MCP_TOOLS = {
 }
 
 # Singleton instances for MCP execution
-_retriever: Optional[Retriever] = None
-_generator: Optional[AnswerGenerator] = None
+_retriever: Retriever | None = None
+_generator: AnswerGenerator | None = None
 
 
 def _get_services():

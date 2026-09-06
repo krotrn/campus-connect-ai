@@ -22,7 +22,7 @@ def create_agent_graph(retriever: Retriever, generator: AnswerGenerator):
     # 1. Router Node
     # ─────────────────────────────────────────────────────────────────────────
     def router_node(state: AgentState) -> dict:
-        
+
         question = state["question"]
         route, reasoning, target = route_query(question)
         steps = state.get("steps_taken", []) + [f"routed_to_{route}"]

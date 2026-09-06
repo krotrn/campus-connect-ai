@@ -7,9 +7,15 @@ import {
 } from "@/types/aeia";
 
 export interface StreamCallbacks {
-  onSources?: (sources: SourceCitation[], sessionId?: string, rewrittenQuestion?: string) => void;
+  onSources?: (
+    sources: SourceCitation[],
+    sessionId?: string,
+    rewrittenQuestion?: string,
+    route?: string,
+    routeReasoning?: string
+  ) => void;
   onToken?: (token: string) => void;
-  onDone?: (latencyMs: number) => void;
+  onDone?: (latencyMs: number, route?: string) => void;
   onError?: (error: string) => void;
 }
 
@@ -104,12 +110,14 @@ export const aeiaService = {
               callbacks.onSources?.(
                 payload.sources || [],
                 payload.session_id,
-                payload.rewritten_question
+                payload.rewritten_question,
+                payload.route,
+                payload.route_reasoning
               );
             } else if (payload.type === "token") {
               callbacks.onToken?.(payload.text);
             } else if (payload.type === "done") {
-              callbacks.onDone?.(payload.latency_ms);
+              callbacks.onDone?.(payload.latency_ms, payload.route);
             } else if (payload.type === "error") {
               callbacks.onError?.(payload.error || "Streaming error occurred");
             }

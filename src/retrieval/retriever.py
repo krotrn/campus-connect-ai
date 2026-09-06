@@ -2,7 +2,6 @@ import re
 import sys
 import threading
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
 
 from fastembed import TextEmbedding
 from flashrank import Ranker, RerankRequest
@@ -55,7 +54,7 @@ class Retriever:
     # Public API
     # ─────────────────────────────────────────────────────────────────────────
 
-    def retrieve(self, query: str, top_k: int = 5) -> List[RetrievedChunk]:
+    def retrieve(self, query: str, top_k: int = 5) -> list[RetrievedChunk]:
         """
         Hybrid retrieval: dense vector + BM25 fused with RRF,
         then optionally reranked by a cross-encoder.
@@ -78,9 +77,9 @@ class Retriever:
         return candidates
 
     @staticmethod
-    def _deduplicate_files(candidates: List[RetrievedChunk], top_k: int) -> List[RetrievedChunk]:
+    def _deduplicate_files(candidates: list[RetrievedChunk], top_k: int) -> list[RetrievedChunk]:
         """Rank files by their strongest chunks, then return one citation per file."""
-        chunks_by_file: Dict[str, List[RetrievedChunk]] = {}
+        chunks_by_file: dict[str, list[RetrievedChunk]] = {}
         for candidate in candidates:
             chunks_by_file.setdefault(candidate.file_path, []).append(candidate)
 
@@ -106,7 +105,7 @@ class Retriever:
         consistent (old *or* new) index — never a half-built one.
         """
         print("📚 Building/Reloading BM25 index from Qdrant collection...")
-        new_chunks: List[dict] = self._scroll_all_payloads()
+        new_chunks: list[dict] = self._scroll_all_payloads()
         if new_chunks:
             tokenized = [self._tokenize(f"{c.get('file_path', '')} {c.get('content', '')}") for c in new_chunks]
             new_bm25 = BM25Okapi(tokenized)
@@ -123,7 +122,7 @@ class Retriever:
     # Dense retrieval
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _retrieve_dense(self, query: str, top_k: int) -> List[RetrievedChunk]:
+    def _retrieve_dense(self, query: str, top_k: int) -> list[RetrievedChunk]:
         try:
             query_vector = list(self.embedding_model.embed(query))[0].tolist()
             results = self.client.query_points(
@@ -153,7 +152,7 @@ class Retriever:
     # Sparse / BM25 retrieval
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _retrieve_bm25(self, query: str, top_k: int) -> List[RetrievedChunk]:
+    def _retrieve_bm25(self, query: str, top_k: int) -> list[RetrievedChunk]:
         tokens = self._tokenize(query)
 
         # Snapshot consistent pair of (bm25, chunks) under the lock
@@ -190,16 +189,16 @@ class Retriever:
 
     def _reciprocal_rank_fusion(
         self,
-        dense: List[RetrievedChunk],
-        sparse: List[RetrievedChunk],
-    ) -> List[RetrievedChunk]:
+        dense: list[RetrievedChunk],
+        sparse: list[RetrievedChunk],
+    ) -> list[RetrievedChunk]:
         """
         Merge two ranked lists using RRF.
         Score = Σ 1 / (k + rank)  for each list the document appears in.
         """
         # Use (file_path, start_line) as a stable dedup key
-        rrf_scores: Dict[Tuple[str, int], float] = {}
-        chunk_map: Dict[Tuple[str, int], RetrievedChunk] = {}
+        rrf_scores: dict[tuple[str, int], float] = {}
+        chunk_map: dict[tuple[str, int], RetrievedChunk] = {}
 
         for rank, chunk in enumerate(dense, start=1):
             key = (chunk.file_path, chunk.start_line)
@@ -234,8 +233,8 @@ class Retriever:
     # ─────────────────────────────────────────────────────────────────────────
 
     def _rerank(
-        self, query: str, candidates: List[RetrievedChunk], top_k: int
-    ) -> List[RetrievedChunk]:
+        self, query: str, candidates: list[RetrievedChunk], top_k: int
+    ) -> list[RetrievedChunk]:
         passages = [{"id": i, "text": c.content} for i, c in enumerate(candidates)]
         request = RerankRequest(query=query, passages=passages)
         results = self._ranker.rerank(request)
@@ -259,7 +258,7 @@ class Retriever:
     # Helpers
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _scroll_all_payloads(self) -> List[dict]:
+    def _scroll_all_payloads(self) -> list[dict]:
         """Fetch every point payload from Qdrant to build the BM25 corpus."""
         all_payloads = []
         next_offset = None
@@ -281,7 +280,7 @@ class Retriever:
             raise VectorDBUnavailableError(f"Failed to scroll Qdrant payloads: {str(e)}") from e
 
     @staticmethod
-    def _tokenize(text: str) -> List[str]:
+    def _tokenize(text: str) -> list[str]:
         """Code-aware tokenizer: splits camelCase, snake_case, dots, slashes."""
         # Split on non-alphanumeric first
         tokens = re.split(r'[^a-zA-Z0-9]+', text)

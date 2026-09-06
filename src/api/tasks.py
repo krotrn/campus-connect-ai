@@ -1,10 +1,9 @@
 import asyncio
 import threading
-from enum import Enum
-from typing import List
+from enum import StrEnum
 
 
-class IngestionStatus(str, Enum):
+class IngestionStatus(StrEnum):
     IDLE = "idle"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -99,7 +98,7 @@ def _sync_full_ingest() -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-async def trigger_incremental_ingestion(changed_files: List[str]) -> bool:
+async def trigger_incremental_ingestion(changed_files: list[str]) -> bool:
     """
     Launch incremental ingestion for *changed_files* in a background thread.
     Returns False if already running.
@@ -116,7 +115,7 @@ async def trigger_incremental_ingestion(changed_files: List[str]) -> bool:
 
 async def _run_incremental_in_background(
     loop: asyncio.AbstractEventLoop,
-    changed_files: List[str],
+    changed_files: list[str],
 ):
     try:
         result = await loop.run_in_executor(None, _sync_incremental_ingest, changed_files)
@@ -129,7 +128,7 @@ async def _run_incremental_in_background(
         _update_state(status=IngestionStatus.FAILED, error=str(e))
 
 
-def _sync_incremental_ingest(changed_files: List[str]) -> dict:
+def _sync_incremental_ingest(changed_files: list[str]) -> dict:
     """Run incremental ingestion synchronously (called in a thread)."""
     from src.ingestion.pipeline import IngestionPipeline
 

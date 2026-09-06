@@ -51,6 +51,8 @@ export interface StreamSourcesPayload {
   sources: SourceCitation[];
   session_id?: string;
   rewritten_question?: string;
+  route?: string;
+  route_reasoning?: string;
 }
 
 export interface StreamTokenPayload {
@@ -61,6 +63,9 @@ export interface StreamTokenPayload {
 export interface StreamDonePayload {
   type: "done";
   latency_ms: number;
+  session_id?: string;
+  route?: string;
+  route_reasoning?: string;
 }
 
 export interface StreamErrorPayload {

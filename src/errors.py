@@ -3,7 +3,6 @@ Custom exception hierarchy for AEIA system.
 Provides clear error categorization for upstream LLM, Vector DB, and corpus issues.
 """
 
-from typing import Optional
 
 
 class AEIAError(Exception):
@@ -22,7 +21,7 @@ class LLMQuotaExceededError(AEIAError):
     def __init__(
         self,
         message: str = "LLM API quota exceeded. Please retry in a few moments.",
-        retry_after: Optional[int] = None,
+        retry_after: int | None = None,
     ):
         super().__init__(message, status_code=429, error_code="LLM_QUOTA_EXHAUSTED")
         self.retry_after = retry_after

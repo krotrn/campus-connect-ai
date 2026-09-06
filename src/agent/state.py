@@ -1,4 +1,4 @@
-from typing import List, Literal, Optional, TypedDict
+from typing import Literal, TypedDict
 
 
 class AgentState(TypedDict):
@@ -6,9 +6,9 @@ class AgentState(TypedDict):
     top_k: int
     route: Literal["direct_rag", "git_history", "git_commit", "file_dependents"]
     route_reasoning: str
-    target: Optional[str]
-    context_chunks: List[dict]
-    tool_output: Optional[str]
+    target: str | None
+    context_chunks: list[dict]
+    tool_output: str | None
     answer: str
-    sources: List[dict]
-    steps_taken: List[str]
+    sources: list[dict]
+    steps_taken: list[str]

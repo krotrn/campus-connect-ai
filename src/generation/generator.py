@@ -1,5 +1,6 @@
 import sys
-from typing import Any, Dict, Iterator, List, Optional
+from collections.abc import Iterator
+from typing import Any
 
 from google import genai
 from google.genai import types
@@ -30,14 +31,14 @@ class SourceCitation(BaseModel):
     start_line: int
     end_line: int
     citation: str
-    content: Optional[str] = None
-    score: Optional[float] = None
+    content: str | None = None
+    score: float | None = None
 
 
 class AnswerResponse(BaseModel):
     question: str
     answer: str
-    sources: List[SourceCitation]
+    sources: list[SourceCitation]
 
 
 class AnswerGenerator:
@@ -55,7 +56,7 @@ class AnswerGenerator:
         self.model_name = model_name
         self.raise_on_quota = raise_on_quota
 
-    def _build_context_block(self, chunks: List[RetrievedChunk]) -> str:
+    def _build_context_block(self, chunks: list[RetrievedChunk]) -> str:
         parts = []
         for i, chunk in enumerate(chunks):
             parts.append(
@@ -67,8 +68,8 @@ class AnswerGenerator:
     def generate(
         self,
         question: str,
-        chunks: List[RetrievedChunk],
-        history: Optional[List[Any]] = None,
+        chunks: list[RetrievedChunk],
+        history: list[Any] | None = None,
     ) -> AnswerResponse:
         sources = [
             SourceCitation(
@@ -165,9 +166,9 @@ class AnswerGenerator:
     def generate_stream(
         self,
         question: str,
-        chunks: List[RetrievedChunk],
-        history: Optional[List[Any]] = None,
-    ) -> Iterator[Dict[str, Any]]:
+        chunks: list[RetrievedChunk],
+        history: list[Any] | None = None,
+    ) -> Iterator[dict[str, Any]]:
         """
         Stream generated answer tokens in real-time using Chat.send_message_stream.
         Yields events:

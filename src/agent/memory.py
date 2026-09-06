@@ -10,7 +10,6 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
 
 from google import genai
 from google.genai import types
@@ -45,7 +44,7 @@ class SessionMemory:
     def __init__(self, session_id: str, max_turns: int = 5):
         self.session_id = session_id
         self.max_turns = max_turns
-        self.messages: List[ChatMessage] = []
+        self.messages: list[ChatMessage] = []
         self._lock = threading.Lock()
         self.last_accessed = time.time()
 
@@ -60,7 +59,7 @@ class SessionMemory:
             if len(self.messages) > max_msgs:
                 self.messages = self.messages[-max_msgs:]
 
-    def get_history(self) -> List[ChatMessage]:
+    def get_history(self) -> list[ChatMessage]:
         """Return a copy of the current message history."""
         with self._lock:
             self.last_accessed = time.time()
@@ -75,12 +74,12 @@ class SessionMemoryManager:
     """Global registry of conversational session memories."""
 
     def __init__(self, max_turns_per_session: int = 5, ttl_seconds: int = 86400):
-        self._sessions: Dict[str, SessionMemory] = {}
+        self._sessions: dict[str, SessionMemory] = {}
         self._lock = threading.Lock()
         self.max_turns = max_turns_per_session
         self.ttl_seconds = ttl_seconds
 
-    def get_or_create(self, session_id: Optional[str] = None) -> Tuple[str, SessionMemory]:
+    def get_or_create(self, session_id: str | None = None) -> tuple[str, SessionMemory]:
         """Retrieve existing session or create a new one with a fresh UUID.
 
         Also evicts expired sessions (older than ttl_seconds) to prevent memory leaks.
@@ -119,8 +118,8 @@ memory_manager = SessionMemoryManager()
 
 def rewrite_query_with_history(
     query: str,
-    history: List[ChatMessage],
-    client: Optional[genai.Client] = None,
+    history: list[ChatMessage],
+    client: genai.Client | None = None,
     model_name: str = "gemini-3.6-flash",
 ) -> str:
     """Rewrite follow-up queries using conversation history to resolve coreferences.

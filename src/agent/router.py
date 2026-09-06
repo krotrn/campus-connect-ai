@@ -1,5 +1,4 @@
 import re
-from typing import Optional, Tuple
 
 from google import genai
 from google.genai import types
@@ -24,7 +23,7 @@ TARGET: <Extracted commit hash or module name if applicable, else NONE>
 """
 
 
-def classify_route_fast(question: str) -> Optional[Tuple[str, str, str]]:
+def classify_route_fast(question: str) -> tuple[str, str, str] | None:
     """
     Deterministic rule-based router. Returns (route, reasoning, target) if confident,
     or None if ambiguous (to let LLM decide).
@@ -69,7 +68,7 @@ def classify_route_fast(question: str) -> Optional[Tuple[str, str, str]]:
     return None
 
 
-def classify_route_llm(question: str) -> Tuple[str, str, str]:
+def classify_route_llm(question: str) -> tuple[str, str, str]:
     """
     Uses Gemini LLM to classify ambiguous queries.
     """
@@ -111,7 +110,7 @@ def classify_route_llm(question: str) -> Tuple[str, str, str]:
         return ("direct_rag", f"Routing fallback to direct_rag due to error: {str(e)}", "")
 
 
-def route_query(question: str) -> Tuple[str, str, str]:
+def route_query(question: str) -> tuple[str, str, str]:
     """
     Main entry point for routing. Tries fast classification first, then falls back to LLM.
     Returns: (route, reasoning, target)

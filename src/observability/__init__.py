@@ -9,7 +9,6 @@ and the raw functions execute normally.
 """
 
 import time
-from typing import Optional
 
 from langfuse import Langfuse
 
@@ -18,10 +17,10 @@ from src.config import settings
 # ─────────────────────────────────────────────────────────────────────────────
 # Client init (None if not configured → tracing becomes no-op)
 # ─────────────────────────────────────────────────────────────────────────────
-_langfuse: Optional[Langfuse] = None
+_langfuse: Langfuse | None = None
 
 
-def init_langfuse() -> Optional[Langfuse]:
+def init_langfuse() -> Langfuse | None:
     """Initialize Langfuse client if keys are configured."""
     global _langfuse
     if settings.langfuse_public_key and settings.langfuse_secret_key:
@@ -37,7 +36,7 @@ def init_langfuse() -> Optional[Langfuse]:
         return None
 
 
-def get_langfuse() -> Optional[Langfuse]:
+def get_langfuse() -> Langfuse | None:
     return _langfuse
 
 

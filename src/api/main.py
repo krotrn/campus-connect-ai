@@ -2,7 +2,7 @@ import json
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -183,7 +183,7 @@ class AskRequest(BaseModel):
         default=False,
         description="Route query through LangGraph state machine with non-RAG tools",
     )
-    session_id: Optional[str] = Field(
+    session_id: str | None = Field(
         default=None,
         description="Optional session ID to maintain multi-turn conversational history",
     )
@@ -196,12 +196,12 @@ class AskRequest(BaseModel):
 class AskResponse(BaseModel):
     question: str
     answer: str
-    sources: List[SourceCitation]
+    sources: list[SourceCitation]
     latency_ms: float
-    session_id: Optional[str] = None
-    rewritten_question: Optional[str] = None
-    route: Optional[str] = None
-    route_reasoning: Optional[str] = None
+    session_id: str | None = None
+    rewritten_question: str | None = None
+    route: str | None = None
+    route_reasoning: str | None = None
 
 
 class AgentAskRequest(BaseModel):
@@ -217,7 +217,7 @@ class AgentAskRequest(BaseModel):
         le=15,
         description="Number of context chunks if routed to RAG",
     )
-    session_id: Optional[str] = Field(
+    session_id: str | None = Field(
         default=None,
         description="Optional session ID to maintain multi-turn conversational history",
     )
@@ -227,20 +227,20 @@ class AgentAskResponse(BaseModel):
     question: str
     route: str
     route_reasoning: str
-    tool_output: Optional[str] = None
+    tool_output: str | None = None
     answer: str
-    sources: List[dict]
-    steps_taken: List[str]
+    sources: list[dict]
+    steps_taken: list[str]
     latency_ms: float
-    session_id: Optional[str] = None
-    rewritten_question: Optional[str] = None
+    session_id: str | None = None
+    rewritten_question: str | None = None
 
 
 class HealthResponse(BaseModel):
     status: str
     collection: str
     points_indexed: int
-    indexed_points: Optional[int] = None
+    indexed_points: int | None = None
     qdrant_url: str
 
 
@@ -249,7 +249,7 @@ class IngestionResponse(BaseModel):
     message: str
     chunks_ingested: int = 0
     files_processed: int = 0
-    error: Optional[str] = None
+    error: str | None = None
 
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -287,7 +287,7 @@ async def ui_playground():
 
 @app.get("/health", response_model=HealthResponse, tags=["General"])
 async def health_check():
-    retriever: Optional[Retriever] = services.get("retriever")
+    retriever: Retriever | None = services.get("retriever")
     if not retriever:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -319,7 +319,7 @@ def _stream_ask_response(
     session_mem: Any,
     retriever: Retriever,
     generator: AnswerGenerator,
-    agent: Optional[Any] = None,
+    agent: Any | None = None,
 ):
     start_time = time.time()
     route, reasoning, target = route_query(search_query)
@@ -413,8 +413,8 @@ def _stream_ask_response(
 )
 @limiter.limit(settings.rate_limit)
 async def ask_question(request: Request, body: AskRequest):
-    retriever: Optional[Retriever] = services.get("retriever")
-    generator: Optional[AnswerGenerator] = services.get("generator")
+    retriever: Retriever | None = services.get("retriever")
+    generator: AnswerGenerator | None = services.get("generator")
     agent = services.get("agent")
 
     if not retriever or not generator:
@@ -519,7 +519,7 @@ async def ask_question_stream(request: Request, body: AskRequest):
 @limiter.limit(settings.rate_limit)
 async def agent_ask(request: Request, body: AgentAskRequest):
     agent = services.get("agent")
-    generator: Optional[AnswerGenerator] = services.get("generator")
+    generator: AnswerGenerator | None = services.get("generator")
     if not agent:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

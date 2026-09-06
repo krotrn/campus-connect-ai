@@ -88,19 +88,37 @@
     <!-- Left Column: Controls & Suggestions -->
     <aside class="lg:w-80 flex flex-col gap-5">
       
-      <!-- Query Mode Selector -->
+      <!-- Autonomous Execution Engine -->
       <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-4 shadow-sm">
-        <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2.5">Execution Mode</label>
-        <div class="grid grid-cols-2 gap-2 bg-slate-950 p-1 rounded-lg border border-slate-800">
-          <button id="modeRag" class="px-3 py-1.5 text-xs font-medium rounded-md bg-emerald-500 text-black shadow-sm transition">
-            Hybrid RAG
-          </button>
-          <button id="modeAgent" class="px-3 py-1.5 text-xs font-medium rounded-md text-slate-400 hover:text-white transition">
-            LangGraph Agent
-          </button>
+        <div class="flex items-center justify-between mb-2.5">
+          <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider">Execution Engine</label>
+          <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <span class="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            Autonomous
+          </span>
         </div>
-        <p id="modeDescription" class="mt-2 text-[11px] text-slate-400 leading-relaxed">
-          Direct 70/30 Dense+BM25 RRF search fused with Gemini 3.6 Flash.
+        <div class="rounded-lg border border-slate-800 bg-slate-950 p-2.5 space-y-2">
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-slate-300 font-medium flex items-center gap-1.5">
+              <span>⚡</span> Hybrid RAG
+            </span>
+            <span class="text-[10px] text-slate-400">Dense + BM25</span>
+          </div>
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-slate-300 font-medium flex items-center gap-1.5">
+              <span>📜</span> Git Commit & History
+            </span>
+            <span class="text-[10px] text-slate-400">Live Diffs</span>
+          </div>
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-slate-300 font-medium flex items-center gap-1.5">
+              <span>🔗</span> Dependency Mapping
+            </span>
+            <span class="text-[10px] text-slate-400">Reverse Scans</span>
+          </div>
+        </div>
+        <p id="modeDescription" class="mt-2.5 text-[11px] text-slate-400 leading-relaxed">
+          Queries are autonomously classified and routed with real-time streaming.
         </p>
       </div>
 
@@ -108,7 +126,7 @@
       <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-4 shadow-sm flex-1">
         <h3 class="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-3">Example Queries</h3>
         <div class="space-y-2 text-xs">
-          <button class="example-btn w-full text-left p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 hover:border-emerald-500/50 hover:bg-slate-800/50 transition flex items-start space-x-2" data-query="Where is user authentication and session management implemented?" data-mode="rag">
+          <button class="example-btn w-full text-left p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 hover:border-emerald-500/50 hover:bg-slate-800/50 transition flex items-start space-x-2" data-query="Where is user authentication and session management implemented?">
             <span class="text-emerald-400">🔑</span>
             <div>
               <p class="font-medium text-slate-200">Authentication Flow</p>
@@ -116,7 +134,7 @@
             </div>
           </button>
 
-          <button class="example-btn w-full text-left p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 hover:border-emerald-500/50 hover:bg-slate-800/50 transition flex items-start space-x-2" data-query="Which files changed in commit 6e19f61 and what was updated?" data-mode="agent">
+          <button class="example-btn w-full text-left p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 hover:border-emerald-500/50 hover:bg-slate-800/50 transition flex items-start space-x-2" data-query="Which files changed in commit 6e19f61 and what was updated?">
             <span class="text-indigo-400">📜</span>
             <div>
               <p class="font-medium text-slate-200">Git Commit Audit</p>
@@ -124,7 +142,7 @@
             </div>
           </button>
 
-          <button class="example-btn w-full text-left p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 hover:border-emerald-500/50 hover:bg-slate-800/50 transition flex items-start space-x-2" data-query="What application services depend on Redis?" data-mode="agent">
+          <button class="example-btn w-full text-left p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 hover:border-emerald-500/50 hover:bg-slate-800/50 transition flex items-start space-x-2" data-query="What application services depend on Redis?">
             <span class="text-amber-400">🔗</span>
             <div>
               <p class="font-medium text-slate-200">Dependency Mapping</p>
@@ -132,7 +150,7 @@
             </div>
           </button>
 
-          <button class="example-btn w-full text-left p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 hover:border-emerald-500/50 hover:bg-slate-800/50 transition flex items-start space-x-2" data-query="Show me the recent 5 git commits on this codebase." data-mode="agent">
+          <button class="example-btn w-full text-left p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 hover:border-emerald-500/50 hover:bg-slate-800/50 transition flex items-start space-x-2" data-query="Show me the recent 5 git commits on this codebase.">
             <span class="text-cyan-400">🕒</span>
             <div>
               <p class="font-medium text-slate-200">Recent Commits</p>
@@ -243,13 +261,10 @@
 
   <script>
     // State
-    let currentMode = 'rag'; // 'rag' | 'agent'
     let currentResponseData = null;
     let currentSessionId = null;
 
     // Elements
-    const modeRagBtn = document.getElementById('modeRag');
-    const modeAgentBtn = document.getElementById('modeAgent');
     const modeDesc = document.getElementById('modeDescription');
     const queryForm = document.getElementById('queryForm');
     const queryInput = document.getElementById('queryInput');
@@ -391,22 +406,6 @@
     }
     checkHealth();
 
-    // Mode Toggle
-    function setMode(mode) {
-      currentMode = mode;
-      if (mode === 'rag') {
-        modeRagBtn.className = 'px-3 py-1.5 text-xs font-medium rounded-md bg-emerald-500 text-black shadow-sm transition';
-        modeAgentBtn.className = 'px-3 py-1.5 text-xs font-medium rounded-md text-slate-400 hover:text-white transition';
-        modeDesc.textContent = 'Direct 70/30 Dense+BM25 RRF search fused with Gemini 3.6 Flash.';
-      } else {
-        modeAgentBtn.className = 'px-3 py-1.5 text-xs font-medium rounded-md bg-indigo-500 text-white shadow-sm transition';
-        modeRagBtn.className = 'px-3 py-1.5 text-xs font-medium rounded-md text-slate-400 hover:text-white transition';
-        modeDesc.textContent = 'LangGraph State Graph routing between Git History, Diffs, Dependency Scans, and RAG.';
-      }
-    }
-    modeRagBtn.addEventListener('click', () => setMode('rag'));
-    modeAgentBtn.addEventListener('click', () => setMode('agent'));
-
     function submitQuery() {
       if (queryForm.requestSubmit) {
         queryForm.requestSubmit();
@@ -419,7 +418,6 @@
     document.querySelectorAll('.example-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         queryInput.value = btn.getAttribute('data-query');
-        setMode(btn.getAttribute('data-mode'));
         submitQuery();
       });
     });
@@ -450,156 +448,121 @@
       const startTime = performance.now();
 
       try {
-        if (currentMode === 'rag') {
-          // ── Real-Time Streaming Mode (SSE) ─────────────────────────────────
-          const res = await fetch('/ask/stream', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-API-Key': apiKey,
-            },
-            body: JSON.stringify({ question, session_id: currentSessionId, stream: true })
-          });
+        // ── Autonomous Unified Streaming Mode (SSE) ───────────────────────
+        const res = await fetch('/ask/stream', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': apiKey,
+          },
+          body: JSON.stringify({ question, session_id: currentSessionId, stream: true })
+        });
 
-          if (!res.ok) {
-            const errData = await res.json().catch(() => ({}));
-            let errMsg = `Server error (${res.status})`;
-            if (typeof errData.detail === 'string') errMsg = errData.detail;
-            else if (Array.isArray(errData.detail)) errMsg = errData.detail.map(d => d.msg || JSON.stringify(d)).join(', ');
-            else if (errData.message) errMsg = errData.message;
-            throw new Error(errMsg);
-          }
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          let errMsg = `Server error (${res.status})`;
+          if (typeof errData.detail === 'string') errMsg = errData.detail;
+          else if (Array.isArray(errData.detail)) errMsg = errData.detail.map(d => d.msg || JSON.stringify(d)).join(', ');
+          else if (errData.message) errMsg = errData.message;
+          throw new Error(errMsg);
+        }
 
-          const reader = res.body.getReader();
-          const decoder = new TextDecoder('utf-8');
-          let buffer = '';
-          let accumulatedAnswer = '';
-          let streamSources = [];
-          let rewrittenNotice = '';
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+        let accumulatedAnswer = '';
+        let streamSources = [];
+        let rewrittenNotice = '';
+        let currentRoute = 'direct_rag';
 
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop(); // retain partial line
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop(); // retain partial line
 
-            for (const line of lines) {
-              const trimmed = line.trim();
-              if (!trimmed.startsWith('data:')) continue;
-              const jsonStr = trimmed.slice(5).trim();
-              if (!jsonStr) continue;
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data:')) continue;
+            const jsonStr = trimmed.slice(5).trim();
+            if (!jsonStr) continue;
 
-              try {
-                const event = JSON.parse(jsonStr);
+            try {
+              const event = JSON.parse(jsonStr);
 
-                if (event.type === 'sources') {
-                  streamSources = event.sources || [];
-                  if (event.session_id) currentSessionId = event.session_id;
+              if (event.type === 'sources') {
+                streamSources = event.sources || [];
+                if (event.session_id) currentSessionId = event.session_id;
+                if (event.route) currentRoute = event.route;
 
-                  // 1. Instant citations render (~35ms)
-                  citationsList.innerHTML = '';
-                  if (streamSources.length > 0) {
-                    citationsSection.classList.remove('hidden');
-                    streamSources.forEach((s, idx) => {
-                      const chip = document.createElement('button');
-                      chip.className = 'px-2.5 py-1 text-xs font-mono rounded-md bg-slate-800 border border-slate-700 hover:border-emerald-500/60 hover:bg-slate-750 text-slate-300 flex items-center space-x-1.5 transition';
-                      const range = s.start_line && s.end_line ? `#L${s.start_line}-L${s.end_line}` : '';
-                      chip.innerHTML = `<span class="text-emerald-400 text-[10px]">#${idx+1}</span> <span>${s.file_path}${range}</span>`;
-                      chip.addEventListener('click', () => openCodeModal(s));
-                      citationsList.appendChild(chip);
-                    });
-                  }
-
-                  if (event.rewritten_question) {
-                    rewrittenNotice = `<div class="mb-3 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-300 text-xs flex items-center space-x-2">
-                      <span>🔄</span><span><b>Expanded Context Query:</b> ${event.rewritten_question}</span>
-                    </div>`;
-                  }
-                  answerText.innerHTML = `${rewrittenNotice}<div id="streamTokens" class="prose prose-invert max-w-none text-sm text-slate-200 leading-relaxed"></div>`;
-
-                  // Telemetry
-                  telemetryBar.classList.remove('hidden');
-                  metricRoute.textContent = 'Direct Hybrid RAG (Streaming)';
-                  metricChunks.textContent = streamSources.length;
-                  metricLatency.textContent = 'streaming...';
-
-                } else if (event.type === 'token') {
-                  accumulatedAnswer += event.text;
-                  const tokenEl = document.getElementById('streamTokens');
-                  if (tokenEl) {
-                    tokenEl.innerHTML = renderMarkdown(accumulatedAnswer, true);
-                  }
-
-                } else if (event.type === 'done') {
-                  const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
-                  metricLatency.textContent = `${event.latency_ms ? (event.latency_ms / 1000).toFixed(2) : elapsed}s`;
-                  currentResponseData = {
-                    answer: accumulatedAnswer,
-                    sources: streamSources,
-                    session_id: currentSessionId,
-                  };
-
-                } else if (event.type === 'error') {
-                  throw new Error(event.error || 'Streaming error');
+                // 1. Instant citations render (~35ms)
+                citationsList.innerHTML = '';
+                if (streamSources.length > 0) {
+                  citationsSection.classList.remove('hidden');
+                  streamSources.forEach((s, idx) => {
+                    const chip = document.createElement('button');
+                    chip.className = 'px-2.5 py-1 text-xs font-mono rounded-md bg-slate-800 border border-slate-700 hover:border-emerald-500/60 hover:bg-slate-750 text-slate-300 flex items-center space-x-1.5 transition';
+                    const range = s.start_line && s.end_line ? `#L${s.start_line}-L${s.end_line}` : '';
+                    chip.innerHTML = `<span class="text-emerald-400 text-[10px]">#${idx+1}</span> <span>${s.file_path}${range}</span>`;
+                    chip.addEventListener('click', () => openCodeModal(s));
+                    citationsList.appendChild(chip);
+                  });
                 }
-              } catch (parseErr) {
-                // Ignore chunk parse errors
+
+                if (event.rewritten_question) {
+                  rewrittenNotice = `<div class="mb-3 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-300 text-xs flex items-center space-x-2">
+                    <span>🔄</span><span><b>Expanded Context Query:</b> ${event.rewritten_question}</span>
+                  </div>`;
+                }
+                answerText.innerHTML = `${rewrittenNotice}<div id="streamTokens" class="prose prose-invert max-w-none text-sm text-slate-200 leading-relaxed"></div>`;
+
+                // Telemetry
+                const routeName = currentRoute === 'git_commit'
+                  ? 'Autonomous Agent → Git Commit Audit'
+                  : currentRoute === 'git_history'
+                  ? 'Autonomous Agent → Git History'
+                  : currentRoute === 'file_dependents'
+                  ? 'Autonomous Agent → Dependency Mapping'
+                  : 'Autonomous Engine → Hybrid RAG';
+
+                telemetryBar.classList.remove('hidden');
+                metricRoute.textContent = routeName;
+                metricChunks.textContent = streamSources.length;
+                metricLatency.textContent = 'streaming...';
+
+              } else if (event.type === 'token') {
+                accumulatedAnswer += event.text;
+                const tokenEl = document.getElementById('streamTokens');
+                if (tokenEl) {
+                  tokenEl.innerHTML = renderMarkdown(accumulatedAnswer, true);
+                }
+
+              } else if (event.type === 'done') {
+                const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
+                const finalRoute = event.route || currentRoute;
+                const routeName = finalRoute === 'git_commit'
+                  ? 'Autonomous Agent → Git Commit Audit'
+                  : finalRoute === 'git_history'
+                  ? 'Autonomous Agent → Git History'
+                  : finalRoute === 'file_dependents'
+                  ? 'Autonomous Agent → Dependency Mapping'
+                  : 'Autonomous Engine → Hybrid RAG';
+
+                metricLatency.textContent = `${event.latency_ms ? (event.latency_ms / 1000).toFixed(2) : elapsed}s`;
+                metricRoute.textContent = routeName;
+                currentResponseData = {
+                  answer: accumulatedAnswer,
+                  sources: streamSources,
+                  session_id: currentSessionId,
+                };
+
+              } else if (event.type === 'error') {
+                throw new Error(event.error || 'Streaming error');
               }
+            } catch (parseErr) {
+              // Ignore chunk parse errors
             }
-          }
-
-        } else {
-          // ── Agent State Graph Mode ─────────────────────────────────────────
-          const res = await fetch('/agent/ask', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-API-Key': apiKey,
-            },
-            body: JSON.stringify({ question, session_id: currentSessionId })
-          });
-
-          const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
-
-          if (!res.ok) {
-            const errData = await res.json().catch(() => ({}));
-            let errMsg = `Server error (${res.status})`;
-            if (typeof errData.detail === 'string') errMsg = errData.detail;
-            else if (Array.isArray(errData.detail)) errMsg = errData.detail.map(d => d.msg || JSON.stringify(d)).join(', ');
-            else if (errData.message) errMsg = errData.message;
-            throw new Error(errMsg);
-          }
-
-          const data = await res.json();
-          currentResponseData = data;
-          if (data.session_id) currentSessionId = data.session_id;
-
-          let htmlContent = '';
-          if (data.rewritten_question) {
-            htmlContent += `<div class="mb-3 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-300 text-xs flex items-center space-x-2">
-              <span>🔄</span><span><b>Expanded Context Query:</b> ${data.rewritten_question}</span>
-            </div>`;
-          }
-          htmlContent += renderMarkdown(data.answer);
-          answerText.innerHTML = htmlContent;
-
-          telemetryBar.classList.remove('hidden');
-          metricRoute.textContent = data.route || 'LangGraph Agent';
-          metricLatency.textContent = `${data.latency_ms ? (data.latency_ms / 1000).toFixed(2) : elapsed}s`;
-          metricChunks.textContent = (data.sources || []).length;
-
-          citationsList.innerHTML = '';
-          if (data.sources && data.sources.length > 0) {
-            citationsSection.classList.remove('hidden');
-            data.sources.forEach((s, idx) => {
-              const chip = document.createElement('button');
-              chip.className = 'px-2.5 py-1 text-xs font-mono rounded-md bg-slate-800 border border-slate-700 hover:border-emerald-500/60 hover:bg-slate-750 text-slate-300 flex items-center space-x-1.5 transition';
-              const range = s.start_line && s.end_line ? `#L${s.start_line}-L${s.end_line}` : '';
-              chip.innerHTML = `<span class="text-emerald-400 text-[10px]">#${idx+1}</span> <span>${s.file_path}${range}</span>`;
-              chip.addEventListener('click', () => openCodeModal(s));
-              citationsList.appendChild(chip);
-            });
           }
         }
 

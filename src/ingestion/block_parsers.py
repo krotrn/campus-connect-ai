@@ -10,7 +10,6 @@ Ensures that:
 
 import re
 from dataclasses import dataclass
-from typing import List
 
 
 @dataclass
@@ -30,8 +29,8 @@ class PrismaBlockParser:
         re.MULTILINE | re.DOTALL,
     )
 
-    def parse(self, text: str) -> List[BlockChunk]:
-        chunks: List[BlockChunk] = []
+    def parse(self, text: str) -> list[BlockChunk]:
+        chunks: list[BlockChunk] = []
         lines = text.splitlines(keepends=True)
         full_text = "".join(lines)
 
@@ -69,13 +68,13 @@ class YamlBlockParser:
         "worker": "Background worker process running BullMQ async jobs and scheduled tasks",
     }
 
-    def parse(self, text: str, rel_path: str = "") -> List[BlockChunk]:
+    def parse(self, text: str, rel_path: str = "") -> list[BlockChunk]:
         lines = text.splitlines()
         if not lines:
             return []
 
-        chunks: List[BlockChunk] = []
-        current_block: List[str] = []
+        chunks: list[BlockChunk] = []
+        current_block: list[str] = []
         current_start = 1
         current_name = "header"
         in_services = False
@@ -159,13 +158,13 @@ class MarkdownSectionParser:
 
     HEADING_REGEX = re.compile(r"^(#{1,3})\s+(.+)$", re.MULTILINE)
 
-    def parse(self, text: str) -> List[BlockChunk]:
+    def parse(self, text: str) -> list[BlockChunk]:
         lines = text.splitlines()
         if not lines:
             return []
 
-        chunks: List[BlockChunk] = []
-        headings: List[tuple] = []  # (line_no, level, title)
+        chunks: list[BlockChunk] = []
+        headings: list[tuple] = []  # (line_no, level, title)
 
         for idx, line in enumerate(lines, start=1):
             m = self.HEADING_REGEX.match(line)
@@ -206,13 +205,13 @@ class MarkdownSectionParser:
 class SqlStatementParser:
     """Chunks SQL migration files by DDL statement boundaries."""
 
-    def parse(self, text: str) -> List[BlockChunk]:
+    def parse(self, text: str) -> list[BlockChunk]:
         lines = text.splitlines()
         if not lines:
             return []
 
-        chunks: List[BlockChunk] = []
-        current_lines: List[str] = []
+        chunks: list[BlockChunk] = []
+        current_lines: list[str] = []
         current_start = 1
 
         for idx, line in enumerate(lines, start=1):

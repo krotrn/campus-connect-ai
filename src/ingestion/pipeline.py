@@ -2,7 +2,6 @@ import hashlib
 import json
 import time
 from pathlib import Path
-from typing import Dict, List, Tuple
 
 from fastembed import TextEmbedding
 from qdrant_client import QdrantClient
@@ -64,7 +63,7 @@ class EmbeddingCache:
 
     def __init__(self, cache_path: Path = EMBEDDING_CACHE_FILE):
         self.cache_path = cache_path
-        self._cache: Dict[str, List[float]] = {}
+        self._cache: dict[str, list[float]] = {}
         self._load()
 
     def _load(self):
@@ -90,10 +89,10 @@ class EmbeddingCache:
     def _hash(text: str) -> str:
         return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
-    def get(self, content: str) -> List[float] | None:
+    def get(self, content: str) -> list[float] | None:
         return self._cache.get(self._hash(content))
 
-    def put(self, content: str, embedding: List[float]):
+    def put(self, content: str, embedding: list[float]):
         self._cache[self._hash(content)] = embedding
 
     def __len__(self):
@@ -136,7 +135,7 @@ class IngestionPipeline:
                 vectors_config=VectorParams(size=settings.embedding_dim, distance=Distance.COSINE),
             )
 
-    def scan_files(self, base_dir: Path) -> List[Path]:
+    def scan_files(self, base_dir: Path) -> list[Path]:
         files_to_process = []
         for p in base_dir.rglob("*"):
             if p.is_file():
@@ -161,13 +160,13 @@ class IngestionPipeline:
             return False
         return True
 
-    def _get_embeddings(self, chunks: List[CodeChunk]) -> List[List[float]]:
+    def _get_embeddings(self, chunks: list[CodeChunk]) -> list[list[float]]:
         """
         Return embeddings for all chunks, using cache where possible.
         Only computes new embeddings for chunks not in the cache.
         """
-        embeddings: List[List[float] | None] = [None] * len(chunks)
-        to_embed: List[Tuple[int, str]] = []  # (index, content)
+        embeddings: list[list[float] | None] = [None] * len(chunks)
+        to_embed: list[tuple[int, str]] = []  # (index, content)
 
         # Check cache first
         cache_hits = 0
@@ -211,7 +210,7 @@ class IngestionPipeline:
 
         Returns the number of points deleted.
         """
-        ids_to_delete: List[int] = []
+        ids_to_delete: list[int] = []
         next_offset = None
         while True:
             records, next_offset = self.client.scroll(
@@ -235,7 +234,7 @@ class IngestionPipeline:
             )
         return len(ids_to_delete)
 
-    def _upsert_chunks(self, chunks: List[CodeChunk], embeddings: List[List[float]]):
+    def _upsert_chunks(self, chunks: list[CodeChunk], embeddings: list[list[float]]):
         """Upsert chunks with deterministic point IDs."""
         total_batches = (len(chunks) + BATCH_SIZE - 1) // BATCH_SIZE
         with tqdm(total=len(chunks), desc="Uploading to Qdrant", unit="chunk") as pbar:
@@ -282,7 +281,7 @@ class IngestionPipeline:
         files = self.scan_files(corpus_path)
         print(f"Found {len(files)} files to ingest from {corpus_path}")
 
-        all_chunks: List[CodeChunk] = []
+        all_chunks: list[CodeChunk] = []
         for file_path in tqdm(files, desc="Parsing files", unit="file"):
             rel_path = str(file_path.relative_to(corpus_path))
             chunks = self.chunker.chunk_file(file_path, rel_path)
@@ -308,7 +307,7 @@ class IngestionPipeline:
     # Incremental (delta-only) ingestion
     # ─────────────────────────────────────────────────────────────────────────
 
-    def run_incremental(self, changed_files: List[str]) -> dict:
+    def run_incremental(self, changed_files: list[str]) -> dict:
         """Re-index only the files that changed.
 
         For each file in *changed_files*:
@@ -326,7 +325,7 @@ class IngestionPipeline:
             raise FileNotFoundError(f"Corpus directory not found at {corpus_path}")
 
         total_deleted = 0
-        all_chunks: List[CodeChunk] = []
+        all_chunks: list[CodeChunk] = []
 
         for rel_path in changed_files:
             if not self._is_ingestable(rel_path):

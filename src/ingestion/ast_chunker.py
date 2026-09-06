@@ -9,7 +9,6 @@ syntax constructs across arbitrary character boundaries.
 import bisect
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List
 
 import tree_sitter_typescript as tstypescript
 from tree_sitter import Language, Node, Parser
@@ -73,7 +72,7 @@ class TreeSitterCodeParser:
 
     def parse(
         self, text: str, file_path: Path, min_chunk_chars: int = 80, max_chunk_chars: int = 1500
-    ) -> List[AstChunk]:
+    ) -> list[AstChunk]:
         """Parse TypeScript/TSX source into semantic AST chunks.
 
         Returns a list of ``AstChunk`` objects with accurate 1-indexed line numbers.
@@ -96,8 +95,8 @@ class TreeSitterCodeParser:
         def get_line_number(byte_offset: int) -> int:
             return bisect.bisect_right(line_starts, byte_offset)
 
-        chunks: List[AstChunk] = []
-        pending_spans: List[_Span] = []
+        chunks: list[AstChunk] = []
+        pending_spans: list[_Span] = []
         pending_chars = 0
 
         def flush_pending():
@@ -120,7 +119,7 @@ class TreeSitterCodeParser:
             pending_spans = []
             pending_chars = 0
 
-        leading_comments: List[_Span] = []
+        leading_comments: list[_Span] = []
 
         for child in root.children:
             if child.type == ";":

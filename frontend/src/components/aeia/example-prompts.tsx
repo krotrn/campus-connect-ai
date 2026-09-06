@@ -49,7 +49,7 @@ const EXAMPLE_PROMPTS: ExamplePrompt[] = [
 ];
 
 interface ExamplePromptsProps {
-  onSelect: (query: string, mode: ExecutionMode) => void;
+  onSelect: (query: string, mode?: ExecutionMode) => void;
   disabled?: boolean;
 }
 

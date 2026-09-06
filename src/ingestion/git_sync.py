@@ -8,7 +8,6 @@ codebase repository and return the list of files that changed.
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List
 
 
 @dataclass
@@ -17,12 +16,12 @@ class GitPullResult:
 
     before_sha: str
     after_sha: str
-    changed_files: List[str] = field(default_factory=list)
+    changed_files: list[str] = field(default_factory=list)
     up_to_date: bool = False
     error: str = ""
 
 
-def _run_git(args: List[str], cwd: Path) -> subprocess.CompletedProcess:
+def _run_git(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
     """Run a git command and return the CompletedProcess."""
     return subprocess.run(
         ["git"] + args,

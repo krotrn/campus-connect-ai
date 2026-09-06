@@ -1,7 +1,6 @@
 import re
 import subprocess
 from pathlib import Path
-from typing import List, Optional
 
 from src.config import settings
 
@@ -13,7 +12,7 @@ def _get_corpus_dir() -> Path:
     return corpus_path
 
 
-def get_git_commit_history(max_count: int = 5, path: Optional[str] = None) -> str:
+def get_git_commit_history(max_count: int = 5, path: str | None = None) -> str:
     """
     Retrieve recent git commit logs from the target corpus repository.
     Safe, read-only git command.
@@ -78,7 +77,7 @@ def get_commit_details(commit_hash: str) -> str:
         return f"Error retrieving commit details: {str(e)}"
 
 
-def find_file_dependents(module_name: str, max_results: int = 20) -> List[str]:
+def find_file_dependents(module_name: str, max_results: int = 20) -> list[str]:
     """
     Scan the codebase to find source files that import or depend on the given module.
     Searches for import / require statements across TypeScript and JavaScript files.
@@ -92,7 +91,7 @@ def find_file_dependents(module_name: str, max_results: int = 20) -> List[str]:
     # Extract filename without directory path for flexible matching
     target_basename = Path(base_target).name
 
-    dependents: List[str] = []
+    dependents: list[str] = []
 
     # File extensions to scan
     code_extensions = {".ts", ".tsx", ".js", ".jsx", ".mjs"}

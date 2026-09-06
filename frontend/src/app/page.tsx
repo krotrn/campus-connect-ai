@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ExecutionMode, SourceCitation, TelemetryData } from "@/types/aeia";
+import { SourceCitation, TelemetryData } from "@/types/aeia";
 import { aeiaService } from "@/services/aeia.service";
 import { ModeSelector } from "@/components/aeia/mode-selector";
 import { ExamplePrompts } from "@/components/aeia/example-prompts";
@@ -13,7 +13,7 @@ import { CodeModal } from "@/components/aeia/code-modal";
 import { SettingsDialog } from "@/components/aeia/settings-dialog";
 
 export default function HomePage() {
-  const [mode, setMode] = React.useState<ExecutionMode>("rag");
+  const [activeRoute, setActiveRoute] = React.useState<string | undefined>();
   const [query, setQuery] = React.useState("");
   const [submittedQuery, setSubmittedQuery] = React.useState("");
   const [sessionId, setSessionId] = React.useState<string | null>(null);
@@ -45,6 +45,7 @@ export default function HomePage() {
     setSources([]);
     setRewrittenQuery(null);
     setTelemetry(null);
+    setActiveRoute(undefined);
   }, []);
 
   React.useEffect(() => {
@@ -53,10 +54,13 @@ export default function HomePage() {
     return () => window.removeEventListener("aeia:reset-chat", handleReset);
   }, [resetSession]);
 
-  const handleSubmit = async (overrideQuery?: string, overrideMode?: ExecutionMode) => {
+  const handleSubmit = async (overrideQuery?: string) => {
     const targetQuery = (overrideQuery ?? query).trim();
-    const targetMode = overrideMode ?? mode;
     if (!targetQuery || loading) return;
+
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
 
     setError(null);
     setSubmittedQuery(targetQuery);
@@ -68,102 +72,89 @@ export default function HomePage() {
     const startTime = performance.now();
     abortControllerRef.current = new AbortController();
 
-    if (targetMode === "rag") {
-      try {
-        let currentSources: SourceCitation[] = [];
-        await aeiaService.askStream(
-          targetQuery,
-          sessionId,
-          {
-            onSources: (incomingSources, incomingSessionId, rewritten) => {
-              currentSources = incomingSources;
-              setSources(incomingSources);
-              if (incomingSessionId) setSessionId(incomingSessionId);
-              if (rewritten) setRewrittenQuery(rewritten);
+    try {
+      let currentSources: SourceCitation[] = [];
+      let resolvedRoute = "direct_rag";
 
-              setTelemetry({
-                route: "Direct Hybrid RAG (Dense + BM25)",
-                latency: "streaming...",
-                chunks: incomingSources.length,
-                model: "gemini-3.6-flash",
-              });
-            },
-            onToken: (token) => {
-              setAccumulatedAnswer((prev) => prev + token);
-            },
-            onDone: (latencyMs) => {
-              const totalSec = (latencyMs / 1000).toFixed(2);
-              setTelemetry({
-                route: "Direct Hybrid RAG (Dense + BM25)",
-                latency: `${totalSec}s`,
-                chunks: currentSources.length,
-                model: "gemini-3.6-flash",
-              });
-              setLoading(false);
-            },
-            onError: (err) => {
-              setError(err);
-              setLoading(false);
-            },
+      await aeiaService.askStream(
+        targetQuery,
+        sessionId,
+        {
+          onSources: (incomingSources, incomingSessionId, rewritten, route) => {
+            currentSources = incomingSources;
+            setSources(incomingSources);
+            if (incomingSessionId) setSessionId(incomingSessionId);
+            if (rewritten) setRewrittenQuery(rewritten);
+            if (route) {
+              resolvedRoute = route;
+              setActiveRoute(route);
+            }
+
+            const routeLabel =
+              resolvedRoute === "git_commit"
+                ? "Autonomous Agent → Git Commit Audit"
+                : resolvedRoute === "git_history"
+                ? "Autonomous Agent → Git History"
+                : resolvedRoute === "file_dependents"
+                ? "Autonomous Agent → Dependency Mapping"
+                : "Autonomous Engine → Hybrid RAG";
+
+            setTelemetry({
+              route: routeLabel,
+              latency: "streaming...",
+              chunks: incomingSources.length,
+              model: "gemini-3.6-flash",
+            });
           },
-          abortControllerRef.current.signal
-        );
-      } catch (err) {
-        if ((err as Error).name !== "AbortError") {
-          setError(err instanceof Error ? err.message : "Failed to execute RAG query");
-        }
-      } finally {
-        setLoading(false);
+          onToken: (token) => {
+            setAccumulatedAnswer((prev) => prev + token);
+          },
+          onDone: (latencyMs, route) => {
+            const totalSec = (latencyMs / 1000).toFixed(2);
+            const finalRoute = route || resolvedRoute;
+            const routeLabel =
+              finalRoute === "git_commit"
+                ? "Autonomous Agent → Git Commit Audit"
+                : finalRoute === "git_history"
+                ? "Autonomous Agent → Git History"
+                : finalRoute === "file_dependents"
+                ? "Autonomous Agent → Dependency Mapping"
+                : "Autonomous Engine → Hybrid RAG";
+
+            setTelemetry({
+              route: routeLabel,
+              latency: `${totalSec}s`,
+              chunks: currentSources.length,
+              model: "gemini-3.6-flash",
+            });
+            setLoading(false);
+          },
+          onError: (err) => {
+            setError(err);
+            setLoading(false);
+          },
+        },
+        abortControllerRef.current.signal
+      );
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") {
+        setError(err instanceof Error ? err.message : "Failed to execute query");
       }
-    } else {
-      try {
-        setTelemetry({
-          route: "LangGraph State Graph Router",
-          latency: "processing multi-step graph...",
-          chunks: 0,
-          model: "gemini-3.6-flash",
-        });
-
-        const res = await aeiaService.askAgent(
-          targetQuery,
-          sessionId,
-          abortControllerRef.current.signal
-        );
-        const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
-
-        setAccumulatedAnswer(res.answer);
-        if (res.session_id) setSessionId(res.session_id);
-        if (res.sources && res.sources.length > 0) {
-          setSources(res.sources);
-        }
-
-        setTelemetry({
-          route: `Agent (${res.route_taken || "Multi-Step"})`,
-          latency: `${elapsed}s`,
-          chunks: res.sources ? res.sources.length : 0,
-          model: "gemini-3.6-flash",
-        });
-      } catch (err) {
-        if ((err as Error).name !== "AbortError") {
-          setError(err instanceof Error ? err.message : "Agent execution failed");
-        }
-      } finally {
-        setLoading(false);
-      }
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleSelectExample = (exampleQuery: string, exampleMode: ExecutionMode) => {
+  const handleSelectExample = (exampleQuery: string) => {
     setQuery(exampleQuery);
-    setMode(exampleMode);
-    handleSubmit(exampleQuery, exampleMode);
+    handleSubmit(exampleQuery);
   };
 
   return (
     <div className="container mx-auto flex max-w-7xl flex-1 flex-col lg:flex-row gap-6 p-4 lg:p-6">
       {/* Sidebar Controls */}
       <aside className="lg:w-80 flex flex-col gap-4">
-        <ModeSelector mode={mode} onChange={setMode} disabled={loading} />
+        <ModeSelector activeRoute={activeRoute} />
         <ExamplePrompts onSelect={handleSelectExample} disabled={loading} />
         <div className="rounded-lg border border-border/40 bg-slate-950/40 p-3 text-center text-[11px] text-muted-foreground font-mono">
           BGE-small (384d) • BM25Okapi • Qdrant • Gemini 3.6 Flash
