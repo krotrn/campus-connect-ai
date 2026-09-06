@@ -1,4 +1,4 @@
-from typing import Literal, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 
 class AgentState(TypedDict):
@@ -12,3 +12,4 @@ class AgentState(TypedDict):
     answer: str
     sources: list[dict]
     steps_taken: list[str]
+    gemini_api_key: NotRequired[str | None]

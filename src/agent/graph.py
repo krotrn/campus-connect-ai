@@ -155,7 +155,11 @@ def create_agent_graph(retriever: Retriever, generator: AnswerGenerator):
                 )
                 for c in context_chunks_data
             ]
-            gen_result = generator.generate(question, chunk_objs)
+            gen_result = generator.generate(
+                question,
+                chunk_objs,
+                api_key=state.get("gemini_api_key"),
+            )
             answer = gen_result.answer
             sources = [s.model_dump() for s in gen_result.sources]
         else:

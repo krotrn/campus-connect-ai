@@ -1,10 +1,17 @@
 "use client";
 
 import * as React from "react";
-import { Check, Loader2, Server, KeyRound, AlertCircle, X } from "lucide-react";
+import { Check, Loader2, Server, KeyRound, AlertCircle, X, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { getStoredApiKey, getStoredBackendUrl, setStoredApiKey, setStoredBackendUrl } from "@/lib/settings";
+import {
+  getStoredApiKey,
+  getStoredBackendUrl,
+  getStoredGeminiApiKey,
+  setStoredApiKey,
+  setStoredBackendUrl,
+  setStoredGeminiApiKey,
+} from "@/lib/settings";
 import { aeiaService } from "@/services/aeia.service";
 
 interface SettingsDialogProps {
@@ -20,6 +27,7 @@ export function SettingsDialog({
 }: SettingsDialogProps) {
   const [url, setUrl] = React.useState("");
   const [key, setKey] = React.useState("");
+  const [geminiKey, setGeminiKey] = React.useState("");
   const [testing, setTesting] = React.useState(false);
   const [testResult, setTestResult] = React.useState<{
     success: boolean;
@@ -30,6 +38,7 @@ export function SettingsDialog({
     if (open) {
       setUrl(getStoredBackendUrl());
       setKey(getStoredApiKey());
+      setGeminiKey(getStoredGeminiApiKey());
       setTestResult(null);
     }
   }, [open]);
@@ -58,6 +67,7 @@ export function SettingsDialog({
   const handleSave = () => {
     setStoredBackendUrl(url);
     setStoredApiKey(key);
+    setStoredGeminiApiKey(geminiKey);
     onSettingsSaved?.();
     onOpenChange(false);
   };
@@ -112,6 +122,33 @@ export function SettingsDialog({
             />
             <p className="mt-1 text-[11px] text-muted-foreground">
               Must match the `API_KEY` configured on your backend server.
+            </p>
+          </div>
+
+          <div>
+            <label className="block font-medium text-slate-300 mb-1.5 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <Sparkles className="size-3.5 text-amber-400" />
+                <span>Google Gemini API Key (Client Quota Override)</span>
+              </span>
+              <a
+                href="https://aistudio.google.com/app/apikey"
+                target="_blank"
+                rel="noreferrer"
+                className="text-[11px] text-amber-400 hover:underline"
+              >
+                Get free key ↗
+              </a>
+            </label>
+            <Input
+              type="password"
+              placeholder="e.g. AIzaSy..."
+              value={geminiKey}
+              onChange={(e) => setGeminiKey(e.target.value)}
+              className="bg-slate-950 border-border text-xs"
+            />
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Optional. Used directly for answer synthesis whenever the backend quota is exhausted (HTTP 429).
             </p>
           </div>
 

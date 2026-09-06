@@ -37,3 +37,23 @@ export function setStoredApiKey(key: string): void {
   }
 }
 
+const GEMINI_API_KEY_KEY = "aeia_gemini_api_key";
+
+export function getStoredGeminiApiKey(): string {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  const stored = localStorage.getItem(GEMINI_API_KEY_KEY);
+  if (stored && stored.trim()) {
+    return stored.trim();
+  }
+  return "";
+}
+
+export function setStoredGeminiApiKey(key: string): void {
+  if (typeof window !== "undefined") {
+    localStorage.setItem(GEMINI_API_KEY_KEY, key.trim());
+  }
+}
+
+

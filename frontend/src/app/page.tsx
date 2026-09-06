@@ -8,6 +8,7 @@ import { ExamplePrompts } from "@/components/aeia/example-prompts";
 import { QueryInput } from "@/components/aeia/query-input";
 import { EmptyConsole } from "@/components/aeia/empty-console";
 import { ErrorBanner } from "@/components/aeia/error-banner";
+import { QuotaAlert } from "@/components/aeia/quota-alert";
 import { AnswerCard } from "@/components/aeia/answer-card";
 import { CodeModal } from "@/components/aeia/code-modal";
 import { SettingsDialog } from "@/components/aeia/settings-dialog";
@@ -150,6 +151,17 @@ export default function HomePage() {
     handleSubmit(exampleQuery);
   };
 
+  const isQuotaExceeded =
+    accumulatedAnswer.includes("Upstream AI Quota Exceeded") ||
+    accumulatedAnswer.includes("Gemini generation quota has been temporarily reached") ||
+    Boolean(
+      error &&
+        (error.includes("429") ||
+          error.includes("Quota Exceeded") ||
+          error.includes("RESOURCE_EXHAUSTED") ||
+          error.includes("LLM_QUOTA_EXHAUSTED"))
+    );
+
   return (
     <div className="container mx-auto flex max-w-7xl flex-1 flex-col lg:flex-row gap-6 p-4 lg:p-6">
       {/* Sidebar Controls */}
@@ -171,7 +183,16 @@ export default function HomePage() {
         />
 
         <div className="flex-1 rounded-xl border border-border/70 bg-slate-900/80 p-5 shadow-sm min-h-[420px] flex flex-col">
-          <ErrorBanner error={error} onOpenSettings={() => setSettingsOpen(true)} />
+          {isQuotaExceeded && (
+            <QuotaAlert
+              onRetry={() => handleSubmit(submittedQuery)}
+              onOpenSettings={() => setSettingsOpen(true)}
+            />
+          )}
+
+          {!isQuotaExceeded && (
+            <ErrorBanner error={error} onOpenSettings={() => setSettingsOpen(true)} />
+          )}
 
           {!submittedQuery && !loading ? (
             <EmptyConsole />

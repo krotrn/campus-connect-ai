@@ -65,11 +65,24 @@ class AnswerGenerator:
             )
         return "\n".join(parts)
 
+    def _resolve_client(self, api_key: str | None = None) -> tuple[genai.Client | None, bool]:
+        """
+        Resolve the Google GenAI client to use.
+        If an explicit api_key is provided from the client, instantiate a dedicated client for it.
+        Otherwise, fall back to self.client configured from server environment settings.
+        Returns: (client, is_custom_key)
+        """
+        clean_key = (api_key or "").strip()
+        if clean_key and clean_key != "your_gemini_api_key_here":
+            return genai.Client(api_key=clean_key), True
+        return self.client, False
+
     def generate(
         self,
         question: str,
         chunks: list[RetrievedChunk],
         history: list[Any] | None = None,
+        api_key: str | None = None,
     ) -> AnswerResponse:
         sources = [
             SourceCitation(
@@ -83,11 +96,12 @@ class AnswerGenerator:
             for c in chunks
         ]
 
-        if not settings.gemini_api_key or settings.gemini_api_key == "your_gemini_api_key_here":
+        client, _ = self._resolve_client(api_key)
+        if not client:
             return AnswerResponse(
                 question=question,
                 answer=(
-                    "⚠️ **Notice**: `GEMINI_API_KEY` is not configured in `.env`. "
+                    "⚠️ **Notice**: `GEMINI_API_KEY` is not configured. "
                     "To enable AI generation, obtain a free API key from https://aistudio.google.com/. "
                     "Displaying retrieved codebase citations directly below."
                 ),
@@ -117,7 +131,7 @@ class AnswerGenerator:
         last_error = None
         for model in [self.model_name, "gemini-2.5-flash", "gemini-2.5-flash-lite"]:
             try:
-                response = self.client.models.generate_content(
+                response = client.models.generate_content(
                     model=model,
                     contents=user_prompt,
                     config=types.GenerateContentConfig(
@@ -168,6 +182,7 @@ class AnswerGenerator:
         question: str,
         chunks: list[RetrievedChunk],
         history: list[Any] | None = None,
+        api_key: str | None = None,
     ) -> Iterator[dict[str, Any]]:
         """
         Stream generated answer tokens in real-time using Chat.send_message_stream.
@@ -190,9 +205,10 @@ class AnswerGenerator:
         # 1. Yield retrieved citations immediately (~35ms)
         yield {"type": "sources", "sources": [s.model_dump() for s in sources]}
 
-        if not settings.gemini_api_key or settings.gemini_api_key == "your_gemini_api_key_here" or not self.client:
+        client, _ = self._resolve_client(api_key)
+        if not client:
             notice = (
-                "⚠️ **Notice**: `GEMINI_API_KEY` is not configured in `.env`. "
+                "⚠️ **Notice**: `GEMINI_API_KEY` is not configured. "
                 "To enable AI generation, obtain a free API key from https://aistudio.google.com/. "
                 "Displaying retrieved codebase citations directly below."
             )
@@ -225,7 +241,7 @@ class AnswerGenerator:
         for model in [self.model_name, "gemini-2.5-flash", "gemini-2.5-flash-lite"]:
             try:
                 # Use official Chat.send_message_stream as recommended by Google GenAI SDK
-                chat = self.client.chats.create(
+                chat = client.chats.create(
                     model=model,
                     config=types.GenerateContentConfig(
                         system_instruction=SYSTEM_PROMPT,

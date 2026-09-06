@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -157,4 +157,90 @@ def test_retriever_dense_vector_db_error():
         with pytest.raises(VectorDBUnavailableError) as exc_info:
             retriever._retrieve_dense("test query", top_k=3)
         assert "Connection refused" in exc_info.value.message
+
+
+def test_generator_client_provided_api_key():
+    """AnswerGenerator uses client-provided API key when passed."""
+    gen = AnswerGenerator()
+    sample_chunks = [
+        RetrievedChunk(
+            content="sample",
+            file_path="file.ts",
+            start_line=1,
+            end_line=2,
+            file_type="typescript",
+            score=0.9,
+        )
+    ]
+    with patch("google.genai.Client") as MockGenaiClient:
+        mock_instance = MagicMock()
+        mock_response = MagicMock()
+        mock_response.text = "Answer generated using client custom key"
+        mock_instance.models.generate_content.return_value = mock_response
+        MockGenaiClient.return_value = mock_instance
+
+        res = gen.generate(
+            "What is this?",
+            sample_chunks,
+            api_key="custom-client-key-12345",
+        )
+        MockGenaiClient.assert_called_with(api_key="custom-client-key-12345")
+        assert "Answer generated using client custom key" in res.answer
+
+
+def test_generator_stream_client_provided_api_key():
+    """AnswerGenerator.generate_stream uses client-provided API key."""
+    gen = AnswerGenerator()
+    sample_chunks = [
+        RetrievedChunk(
+            content="sample",
+            file_path="file.ts",
+            start_line=1,
+            end_line=2,
+            file_type="typescript",
+            score=0.9,
+        )
+    ]
+    with patch("google.genai.Client") as MockGenaiClient:
+        mock_instance = MagicMock()
+        mock_chat = MagicMock()
+        mock_chunk = MagicMock()
+        mock_chunk.text = "Streamed with client key"
+        mock_chat.send_message_stream.return_value = [mock_chunk]
+        mock_instance.chats.create.return_value = mock_chat
+        MockGenaiClient.return_value = mock_instance
+
+        events = list(
+            gen.generate_stream(
+                "What is this?",
+                sample_chunks,
+                api_key="custom-client-key-12345",
+            )
+        )
+        MockGenaiClient.assert_called_with(api_key="custom-client-key-12345")
+        token_events = [e for e in events if e["type"] == "token"]
+        assert any("Streamed with client key" in t["text"] for t in token_events)
+
+
+def test_ask_endpoint_forwards_custom_gemini_api_key(client, auth_headers):
+    """POST /ask forwards gemini_api_key to traced_ask / generator."""
+    with patch("src.api.main.traced_ask") as mock_traced_ask:
+        mock_traced_ask.return_value = {
+            "answer": "Test answer with custom key",
+            "sources": [],
+            "latency_ms": 12.5,
+        }
+        res = client.post(
+            "/ask",
+            headers=auth_headers,
+            json={
+                "question": "How does authentication work?",
+                "top_k": 3,
+                "gemini_api_key": "custom-key-body-abc",
+            },
+        )
+        assert res.status_code == 200
+        assert mock_traced_ask.call_args[1].get("api_key") == "custom-key-body-abc"
+
+
 

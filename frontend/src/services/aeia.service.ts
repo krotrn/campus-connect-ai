@@ -1,4 +1,4 @@
-import { getStoredApiKey, getStoredBackendUrl } from "@/lib/settings";
+import { getStoredApiKey, getStoredBackendUrl, getStoredGeminiApiKey } from "@/lib/settings";
 import {
   AgentAskResponse,
   HealthResponse,
@@ -51,17 +51,24 @@ export const aeiaService = {
   ): Promise<void> {
     const baseUrl = getStoredBackendUrl();
     const apiKey = getStoredApiKey();
+    const geminiApiKey = getStoredGeminiApiKey();
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "X-API-Key": apiKey,
+    };
+    if (geminiApiKey) {
+      headers["X-Gemini-API-Key"] = geminiApiKey;
+    }
 
     const response = await fetch(`${baseUrl}/ask/stream`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-Key": apiKey,
-      },
+      headers,
       body: JSON.stringify({
         question,
         session_id: sessionId || undefined,
         stream: true,
+        gemini_api_key: geminiApiKey || undefined,
       }),
       signal,
     });
@@ -141,16 +148,23 @@ export const aeiaService = {
   ): Promise<AgentAskResponse> {
     const baseUrl = getStoredBackendUrl();
     const apiKey = getStoredApiKey();
+    const geminiApiKey = getStoredGeminiApiKey();
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "X-API-Key": apiKey,
+    };
+    if (geminiApiKey) {
+      headers["X-Gemini-API-Key"] = geminiApiKey;
+    }
 
     const response = await fetch(`${baseUrl}/agent/ask`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-Key": apiKey,
-      },
+      headers,
       body: JSON.stringify({
         question,
         session_id: sessionId || undefined,
+        gemini_api_key: geminiApiKey || undefined,
       }),
       signal,
     });

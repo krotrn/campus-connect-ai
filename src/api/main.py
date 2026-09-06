@@ -6,7 +6,8 @@ from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
+from google import genai
 from google.genai.errors import APIError
 from pydantic import BaseModel, Field
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -191,6 +192,10 @@ class AskRequest(BaseModel):
         default=False,
         description="Stream response tokens via Server-Sent Events (SSE)",
     )
+    gemini_api_key: str | None = Field(
+        default=None,
+        description="Optional client-provided Gemini API key to override server quota or defaults",
+    )
 
 
 class AskResponse(BaseModel):
@@ -220,6 +225,10 @@ class AgentAskRequest(BaseModel):
     session_id: str | None = Field(
         default=None,
         description="Optional session ID to maintain multi-turn conversational history",
+    )
+    gemini_api_key: str | None = Field(
+        default=None,
+        description="Optional client-provided Gemini API key to override server quota or defaults",
     )
 
 
@@ -252,37 +261,17 @@ class IngestionResponse(BaseModel):
     error: str | None = None
 
 
-STATIC_DIR = Path(__file__).parent / "static"
-STATIC_INDEX = STATIC_DIR / "index.html"
-
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Public endpoints (no auth)
 # ─────────────────────────────────────────────────────────────────────────────
 @app.get("/", tags=["General"])
-async def root(request: Request):
-    """API root. Redirects browsers to /ui while returning JSON to API clients."""
-    accept = request.headers.get("accept", "")
-    if "text/html" in accept:
-        return RedirectResponse(url="/ui", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
-
+async def root():
+    """API root. Returns JSON metadata to API clients."""
     return {
         "message": "AI Engineering Intelligence Assistant is running",
         "docs_url": "/docs",
         "health_url": "/health",
-        "ui_url": "/ui",
     }
-
-
-@app.get("/ui", tags=["UI"], response_class=FileResponse)
-async def ui_playground():
-    """Serve the interactive Web UI playground."""
-    if not STATIC_INDEX.is_file():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="UI playground file not found",
-        )
-    return FileResponse(STATIC_INDEX)
 
 
 @app.get("/health", response_model=HealthResponse, tags=["General"])
@@ -320,6 +309,7 @@ def _stream_ask_response(
     retriever: Retriever,
     generator: AnswerGenerator,
     agent: Any | None = None,
+    gemini_api_key: str | None = None,
 ):
     start_time = time.time()
     route, reasoning, target = route_query(search_query)
@@ -331,6 +321,7 @@ def _stream_ask_response(
                     "question": search_query,
                     "top_k": body.top_k,
                     "steps_taken": ["received_query"],
+                    "gemini_api_key": gemini_api_key,
                 })
                 latency_ms = round((time.time() - start_time) * 1000, 2)
                 answer_text = final_state.get("answer", "")
@@ -362,7 +353,12 @@ def _stream_ask_response(
             else:
                 chunks = retriever.retrieve(search_query, top_k=body.top_k)
                 full_answer = []
-                for event in generator.generate_stream(search_query, chunks, history=session_mem.get_history()):
+                for event in generator.generate_stream(
+                    search_query,
+                    chunks,
+                    history=session_mem.get_history(),
+                    api_key=gemini_api_key,
+                ):
                     if event["type"] == "sources":
                         payload = {
                             "type": "sources",
@@ -427,9 +423,22 @@ async def ask_question(request: Request, body: AskRequest):
     session_id, session_mem = memory_manager.get_or_create(body.session_id)
     history = session_mem.get_history()
 
+    # Determine effective client-provided or header-provided Gemini API key
+    effective_gemini_key = (
+        (body.gemini_api_key or "").strip()
+        or request.headers.get("x-gemini-api-key", "").strip()
+        or request.headers.get("X-Gemini-API-Key", "").strip()
+        or None
+    )
+
     # Coreference resolution / search query expansion
-    client = generator.client if generator else None
-    search_query = rewrite_query_with_history(body.question, history, client=client)
+    rewriter_client = None
+    if effective_gemini_key:
+        rewriter_client = genai.Client(api_key=effective_gemini_key)
+    elif generator:
+        rewriter_client = generator.client
+
+    search_query = rewrite_query_with_history(body.question, history, client=rewriter_client)
 
     # If client requested Server-Sent Events (SSE) streaming
     if body.stream or "text/event-stream" in request.headers.get("accept", ""):
@@ -442,6 +451,7 @@ async def ask_question(request: Request, body: AskRequest):
             retriever=retriever,
             generator=generator,
             agent=agent,
+            gemini_api_key=effective_gemini_key,
         )
 
     try:
@@ -450,6 +460,7 @@ async def ask_question(request: Request, body: AskRequest):
                 "question": search_query,
                 "top_k": body.top_k,
                 "steps_taken": ["received_query"],
+                "gemini_api_key": effective_gemini_key,
             })
             citations = [
                 SourceCitation(
@@ -476,7 +487,14 @@ async def ask_question(request: Request, body: AskRequest):
                 route_reasoning=final_state.get("route_reasoning", ""),
             )
 
-        result = traced_ask(search_query, body.top_k, retriever, generator, history=history)
+        result = traced_ask(
+            search_query,
+            body.top_k,
+            retriever,
+            generator,
+            history=history,
+            api_key=effective_gemini_key,
+        )
         session_mem.add_turn(body.question, result["answer"])
 
         return AskResponse(
@@ -530,15 +548,29 @@ async def agent_ask(request: Request, body: AgentAskRequest):
     session_id, session_mem = memory_manager.get_or_create(body.session_id)
     history = session_mem.get_history()
 
+    # Determine effective client-provided or header-provided Gemini API key
+    effective_gemini_key = (
+        (body.gemini_api_key or "").strip()
+        or request.headers.get("x-gemini-api-key", "").strip()
+        or request.headers.get("X-Gemini-API-Key", "").strip()
+        or None
+    )
+
     # Coreference resolution / search query expansion
-    client = generator.client if generator else None
-    search_query = rewrite_query_with_history(body.question, history, client=client)
+    rewriter_client = None
+    if effective_gemini_key:
+        rewriter_client = genai.Client(api_key=effective_gemini_key)
+    elif generator:
+        rewriter_client = generator.client
+
+    search_query = rewrite_query_with_history(body.question, history, client=rewriter_client)
 
     try:
         final_state = agent.invoke({
             "question": search_query,
             "top_k": body.top_k,
             "steps_taken": ["received_query"],
+            "gemini_api_key": effective_gemini_key,
         })
         latency_ms = round((time.time() - start_time) * 1000, 2)
         answer_text = final_state.get("answer", "")

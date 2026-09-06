@@ -49,7 +49,7 @@ def flush():
 # ─────────────────────────────────────────────────────────────────────────────
 # Traced RAG pipeline
 # ─────────────────────────────────────────────────────────────────────────────
-def traced_ask(question: str, top_k: int, retriever, generator, history=None) -> dict:
+def traced_ask(question: str, top_k: int, retriever, generator, history=None, api_key: str | None = None) -> dict:
     """
     Execute the full RAG pipeline with Langfuse tracing.
 
@@ -57,16 +57,16 @@ def traced_ask(question: str, top_k: int, retriever, generator, history=None) ->
     Returns dict with: answer, sources, latency_ms, trace_id
     """
     if not _langfuse:
-        return _untraced_ask(question, top_k, retriever, generator, history=history)
+        return _untraced_ask(question, top_k, retriever, generator, history=history, api_key=api_key)
 
-    return _traced_ask_impl(question, top_k, retriever, generator, history=history)
+    return _traced_ask_impl(question, top_k, retriever, generator, history=history, api_key=api_key)
 
 
-def _untraced_ask(question: str, top_k: int, retriever, generator, history=None) -> dict:
+def _untraced_ask(question: str, top_k: int, retriever, generator, history=None, api_key: str | None = None) -> dict:
     """Plain execution without any tracing overhead."""
     start = time.time()
     chunks = retriever.retrieve(question, top_k=top_k)
-    result = generator.generate(question, chunks, history=history)
+    result = generator.generate(question, chunks, history=history, api_key=api_key)
     latency_ms = round((time.time() - start) * 1000, 2)
 
     return {
@@ -77,7 +77,7 @@ def _untraced_ask(question: str, top_k: int, retriever, generator, history=None)
     }
 
 
-def _traced_ask_impl(question: str, top_k: int, retriever, generator, history=None) -> dict:
+def _traced_ask_impl(question: str, top_k: int, retriever, generator, history=None, api_key: str | None = None) -> dict:
     """Full Langfuse-traced execution."""
     trace = _langfuse.trace(
         name="rag-ask",
@@ -115,7 +115,7 @@ def _traced_ask_impl(question: str, top_k: int, retriever, generator, history=No
     )
 
     generation_start = time.time()
-    result = generator.generate(question, chunks, history=history)
+    result = generator.generate(question, chunks, history=history, api_key=api_key)
     generation_ms = round((time.time() - generation_start) * 1000, 2)
 
     generation_span.end(
