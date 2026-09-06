@@ -1,5 +1,4 @@
-import pytest
-from src.agent.router import classify_route_fast, route_query
+from src.agent.router import route_query
 
 
 def test_router_git_commit():

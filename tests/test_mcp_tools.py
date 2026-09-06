@@ -1,4 +1,5 @@
 import pytest
+
 from src.mcp.server import ALLOWED_MCP_TOOLS, mcp_server
 
 

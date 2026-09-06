@@ -1,21 +1,26 @@
-import os
 import sys
 from typing import Any, Dict, Iterator, List, Optional
+
 from google import genai
 from google.genai import types
 from pydantic import BaseModel
+
 from src.config import settings
 from src.errors import LLMQuotaExceededError
 from src.retrieval.retriever import RetrievedChunk, Retriever
 
 SYSTEM_PROMPT = """You are an expert AI Engineering Intelligence Assistant analyzing the Campus Connect codebase.
 
-Your mission is to answer engineering questions accurately, concisely, and strictly grounded in the provided code/docs chunks.
+Your mission is to answer engineering questions accurately, concisely, and strictly grounded in the
+provided code/docs chunks.
 
 RULES:
 1. Base your answer ONLY on the provided context chunks.
-2. For every claim, architectural fact, or code location, cite the source using the exact format: `[filepath#Lstart-Lend]`.
-3. If the provided context does not contain enough information to answer the question, clearly state: "I cannot find sufficient information in the codebase to answer this question." Do NOT hallucinate non-existent files or functions.
+2. For every claim, architectural fact, or code location, cite the source using the exact format:
+   `[filepath#Lstart-Lend]`.
+3. If the provided context does not contain enough information to answer the question, clearly state:
+   "I cannot find sufficient information in the codebase to answer this question."
+   Do NOT hallucinate non-existent files or functions.
 4. Provide actionable, technical explanations with relevant code references.
 """
 
@@ -137,7 +142,8 @@ class AnswerGenerator:
 
             if is_quota:
                 answer_text = (
-                    "⚠️ **Upstream AI Quota Exceeded (HTTP 429)**: The Gemini generation quota has been temporarily reached. "
+                    "⚠️ **Upstream AI Quota Exceeded (HTTP 429)**: "
+                    "The Gemini generation quota has been temporarily reached. "
                     "Below are the exact grounded context chunks retrieved for your question:\n\n"
                     + "\n\n".join(
                         f"**Source: `{c.citation}`** ({c.file_type})\n```\n{c.content[:250].strip()}...\n```"
@@ -245,7 +251,8 @@ class AnswerGenerator:
 
             if is_quota:
                 fallback = (
-                    "⚠️ **Upstream AI Quota Exceeded (HTTP 429)**: The Gemini generation quota has been temporarily reached. "
+                    "⚠️ **Upstream AI Quota Exceeded (HTTP 429)**: "
+                    "The Gemini generation quota has been temporarily reached. "
                     "Below are the exact grounded context chunks retrieved for your question:\n\n"
                     + "\n\n".join(
                         f"**Source: `{c.citation}`** ({c.file_type})\n```\n{c.content[:250].strip()}...\n```"

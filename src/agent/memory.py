@@ -19,11 +19,14 @@ from src.config import settings
 
 REWRITE_SYSTEM_PROMPT = """You are an expert search query reformulation engine for a codebase intelligence tool.
 
-Your job is to examine a conversation history between a software engineer and an assistant, and rewrite the user's latest follow-up question into a single, fully self-contained search query.
+Your job is to examine a conversation history between a software engineer and an assistant,
+and rewrite the user's latest follow-up question into a single, fully self-contained search query.
 
 RULES:
-1. Resolve all ambiguous pronouns ("it", "its", "that", "this component", "those files") using the context from the conversation history.
-2. If the user's question is already completely self-contained (e.g. "Where is Redis configured in Docker Compose?"), output it EXACTLY as-is.
+1. Resolve all ambiguous pronouns ("it", "its", "that", "this component", "those files")
+   using the context from the conversation history.
+2. If the user's question is already completely self-contained (e.g. "Where is Redis configured in Docker Compose?"),
+   output it EXACTLY as-is.
 3. Do NOT attempt to answer the question.
 4. Output ONLY the rewritten search query. No markdown fences, no explanations, no preamble.
 """
@@ -128,7 +131,9 @@ def rewrite_query_with_history(
         return query
 
     # Quick heuristic: if query contains no pronouns or follow-up markers, leave as-is
-    follow_up_markers = {"it", "its", "that", "this", "these", "those", "them", "and", "what about", "how about", "show me"}
+    follow_up_markers = {
+        "it", "its", "that", "this", "these", "those", "them", "and", "what about", "how about", "show me"
+    }
     words = set(query.lower().split())
     if not (words & follow_up_markers) and len(query.split()) >= 6:
         return query

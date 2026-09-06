@@ -8,7 +8,7 @@ syntax constructs across arbitrary character boundaries.
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 import tree_sitter_typescript as tstypescript
 from tree_sitter import Language, Node, Parser
@@ -66,7 +66,9 @@ class TreeSitterCodeParser:
                     return child
         return node
 
-    def parse(self, text: str, file_path: Path, min_chunk_chars: int = 80, max_chunk_chars: int = 1500) -> List[AstChunk]:
+    def parse(
+        self, text: str, file_path: Path, min_chunk_chars: int = 80, max_chunk_chars: int = 1500
+    ) -> List[AstChunk]:
         """Parse TypeScript/TSX source into semantic AST chunks.
 
         Returns a list of ``AstChunk`` objects with accurate 1-indexed line numbers.
@@ -123,7 +125,9 @@ class TreeSitterCodeParser:
                 if node_chars >= min_chunk_chars:
                     flush_pending()
                     start_node = leading_comments[0] if leading_comments else child
-                    chunk_text = source_bytes[start_node.start_byte : child.end_byte].decode("utf-8", errors="ignore").strip()
+                    chunk_text = (
+                        source_bytes[start_node.start_byte : child.end_byte].decode("utf-8", errors="ignore").strip()
+                    )
                     chunks.append(
                         AstChunk(
                             content=chunk_text,

@@ -10,7 +10,6 @@ Ensures that:
 
 import re
 from dataclasses import dataclass
-from pathlib import Path
 from typing import List
 
 
@@ -72,7 +71,6 @@ class YamlBlockParser:
         current_start = 1
         current_name = "header"
         in_services = False
-        service_name = ""
 
         is_compose = "compose" in rel_path.lower()
 
@@ -206,7 +204,6 @@ class SqlStatementParser:
         chunks: List[BlockChunk] = []
         current_lines: List[str] = []
         current_start = 1
-        current_type = "statement"
 
         for idx, line in enumerate(lines, start=1):
             stripped = line.strip()

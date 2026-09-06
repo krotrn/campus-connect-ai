@@ -1,5 +1,5 @@
 import re
-from typing import List
+
 from langgraph.graph import END, START, StateGraph
 
 from src.agent.router import route_query
@@ -72,7 +72,10 @@ def create_agent_graph(retriever: Retriever, generator: AnswerGenerator):
             match = re.search(r"\b([0-9a-fA-F]{6,40})\b", state["question"])
             target = match.group(1) if match else ""
         if not target:
-            return {"tool_output": "Error: No commit hash found in the query. Please specify a commit hash.", "steps_taken": state.get("steps_taken", []) + ["error_no_commit_hash"]}
+            return {
+                "tool_output": "Error: No commit hash found in the query. Please specify a commit hash.",
+                "steps_taken": state.get("steps_taken", []) + ["error_no_commit_hash"],
+            }
 
         commit_info = get_commit_details(target)
         steps = state.get("steps_taken", []) + [f"inspected_commit_{target}"]
@@ -85,10 +88,19 @@ def create_agent_graph(retriever: Retriever, generator: AnswerGenerator):
         target = state.get("target") or ""
         if not target:
             # Extract candidate module name from question
-            match = re.search(r"(?:depend on|import|use)\s+['\"]?([a-zA-Z0-9_\-\.\/]+)", state["question"], re.IGNORECASE)
+            match = re.search(
+                r"(?:depend on|import|use)\s+['\"]?([a-zA-Z0-9_\-\.\/]+)",
+                state["question"],
+                re.IGNORECASE,
+            )
             target = match.group(1) if match else ""
         if not target:
-            return {"tool_output": "Error: Could not identify a module name from the query. Please specify which module to check.", "steps_taken": state.get("steps_taken", []) + ["error_no_module_name"]}
+            return {
+                "tool_output": (
+                    "Error: Could not identify a module name from the query. Please specify which module to check."
+                ),
+                "steps_taken": state.get("steps_taken", []) + ["error_no_module_name"],
+            }
 
         dependents = find_file_dependents(target)
         if dependents:
@@ -116,9 +128,12 @@ def create_agent_graph(retriever: Retriever, generator: AnswerGenerator):
                 f"**Route Selected**: `{state.get('route')}` ({state.get('route_reasoning')})\n\n"
                 f"```text\n{tool_output}\n```"
             )
+            source_file = (
+                "git-repository-history" if "git" in state.get("route", "") else "module-dependency-graph"
+            )
             sources = [
                 {
-                    "file_path": "git-repository-history" if "git" in state.get("route", "") else "module-dependency-graph",
+                    "file_path": source_file,
                     "start_line": 1,
                     "end_line": 1,
                     "citation": "repo-tool-call",

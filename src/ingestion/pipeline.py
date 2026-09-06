@@ -4,7 +4,6 @@ import time
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-
 from fastembed import TextEmbedding
 from qdrant_client import QdrantClient
 from qdrant_client.models import (

@@ -19,7 +19,11 @@ class AEIAError(Exception):
 class LLMQuotaExceededError(AEIAError):
     """Raised when Gemini or external LLM API rate limit or quota is exhausted (HTTP 429)."""
 
-    def __init__(self, message: str = "LLM API quota exceeded. Please retry in a few moments.", retry_after: Optional[int] = None):
+    def __init__(
+        self,
+        message: str = "LLM API quota exceeded. Please retry in a few moments.",
+        retry_after: Optional[int] = None,
+    ):
         super().__init__(message, status_code=429, error_code="LLM_QUOTA_EXHAUSTED")
         self.retry_after = retry_after
 

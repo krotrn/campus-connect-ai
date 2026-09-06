@@ -1,4 +1,3 @@
-import pytest
 from src.agent.tools import (
     find_file_dependents,
     get_commit_details,

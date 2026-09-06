@@ -1,11 +1,9 @@
 import asyncio
-import os
 import sys
-from typing import List, Optional
+from typing import Optional
 
 from mcp.server import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
-
 from src.agent.tools import (
     find_file_dependents,
     get_commit_details,
@@ -67,7 +65,10 @@ def create_mcp_server() -> MCPServer:
     # ─────────────────────────────────────────────────────────────────────────
     @server.tool(
         name="search_campus_connect",
-        description="Perform hybrid (BM25 + dense vector) search over the Campus Connect codebase. Returns code chunks with exact file paths and line numbers.",
+        description=(
+            "Perform hybrid (BM25 + dense vector) search over the Campus Connect codebase. "
+            "Returns code chunks with exact file paths and line numbers."
+        ),
     )
     def search_campus_connect(query: str, top_k: int = 5) -> str:
         if "search_campus_connect" not in ALLOWED_MCP_TOOLS:
@@ -92,7 +93,10 @@ def create_mcp_server() -> MCPServer:
     # ─────────────────────────────────────────────────────────────────────────
     @server.tool(
         name="explain_codebase_query",
-        description="Ask an engineering question about the Campus Connect codebase. Returns a synthesized answer strictly grounded in source code with [filepath#Lstart-Lend] citations.",
+        description=(
+            "Ask an engineering question about the Campus Connect codebase. "
+            "Returns a synthesized answer strictly grounded in source code with [filepath#Lstart-Lend] citations."
+        ),
     )
     def explain_codebase_query(question: str, top_k: int = 5) -> str:
         if "explain_codebase_query" not in ALLOWED_MCP_TOOLS:
@@ -110,7 +114,9 @@ def create_mcp_server() -> MCPServer:
     # ─────────────────────────────────────────────────────────────────────────
     @server.tool(
         name="get_commit_history",
-        description="Retrieve recent git commit logs from the Campus Connect repository, optionally filtered by file path.",
+        description=(
+            "Retrieve recent git commit logs from the Campus Connect repository, optionally filtered by file path."
+        ),
     )
     def get_commit_history(max_count: int = 5, path: str = "") -> str:
         if "get_commit_history" not in ALLOWED_MCP_TOOLS:
@@ -136,7 +142,9 @@ def create_mcp_server() -> MCPServer:
     # ─────────────────────────────────────────────────────────────────────────
     @server.tool(
         name="find_module_dependents",
-        description="Scan the codebase to identify all source files (.ts, .tsx, .js) that import or depend on a given module.",
+        description=(
+            "Scan the codebase to identify all source files (.ts, .tsx, .js) that import or depend on a given module."
+        ),
     )
     def find_module_dependents(module_name: str) -> str:
         if "find_module_dependents" not in ALLOWED_MCP_TOOLS:

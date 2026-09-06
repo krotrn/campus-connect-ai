@@ -1,6 +1,7 @@
 """Tests for syntax-aware structural chunkers (Tree-Sitter, Prisma, YAML, Markdown, SQL)."""
 
 from pathlib import Path
+
 from src.ingestion.ast_chunker import TreeSitterCodeParser
 from src.ingestion.block_parsers import (
     MarkdownSectionParser,

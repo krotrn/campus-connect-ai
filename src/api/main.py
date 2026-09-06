@@ -1,9 +1,9 @@
+import json
 import time
 from contextlib import asynccontextmanager
-from typing import List, Optional
-
-import json
 from pathlib import Path
+from typing import Any, List, Optional
+
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
+from starlette.responses import JSONResponse as StarletteJSONResponse
 
 from src.agent import create_agent_graph
 from src.agent.memory import memory_manager, rewrite_query_with_history
@@ -20,14 +21,12 @@ from src.api.webhook import handle_github_webhook
 from src.config import settings
 from src.errors import (
     AEIAError,
-    CorpusUnavailableError,
     LLMQuotaExceededError,
-    LLMServiceUnavailableError,
-    VectorDBUnavailableError,
 )
 from src.generation.generator import AnswerGenerator, SourceCitation
 from src.mcp import get_streamable_http_app, mcp_server
-from src.observability import flush as langfuse_flush, init_langfuse, traced_ask
+from src.observability import flush as langfuse_flush
+from src.observability import init_langfuse, traced_ask
 from src.retrieval.retriever import Retriever
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -123,9 +122,6 @@ async def google_api_error_handler(request: Request, exc: APIError):
 
 # Mount Model Context Protocol (MCP) Streamable HTTP endpoint (2026-07-28 spec)
 # Mount MCP with API key authentication middleware
-from starlette.middleware import Middleware
-from starlette.responses import JSONResponse as StarletteJSONResponse
-
 _mcp_app = get_streamable_http_app()
 _original_mcp_app_call = _mcp_app.__call__
 
@@ -343,7 +339,8 @@ def _stream_ask_response(
                     latency_ms = round((time.time() - start_time) * 1000, 2)
                     final_text = "".join(full_answer)
                     session_mem.add_turn(body.question, final_text)
-                    yield f"data: {json.dumps({'type': 'done', 'latency_ms': latency_ms, 'session_id': session_id})}\n\n"
+                    done_payload = {"type": "done", "latency_ms": latency_ms, "session_id": session_id}
+                    yield f"data: {json.dumps(done_payload)}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
 

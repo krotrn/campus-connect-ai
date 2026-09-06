@@ -2,7 +2,8 @@
 RAG Triad Generation Evaluation Suite for AEIA.
 
 Measures the 3 essential dimensions of RAG generation quality:
-1. Faithfulness (Groundedness): Are all claims in the answer strictly entailed by the retrieved context? (Hallucination rate = 1 - Faithfulness)
+1. Faithfulness (Groundedness): Are all claims in the answer strictly entailed by the retrieved context?
+   (Hallucination rate = 1 - Faithfulness)
 2. Answer Relevance: Does the generated answer directly address the user's question without extraneous filler?
 3. Context Precision: Were the retrieved chunks actually relevant and necessary to synthesize the answer?
 
@@ -11,7 +12,6 @@ Uses Google Gemini (gemini-3.6-flash) as an automated LLM-as-a-Judge.
 
 import argparse
 import json
-import os
 import re
 import sys
 import time
@@ -28,7 +28,8 @@ from src.config import settings
 from src.generation.generator import AnswerGenerator
 from src.retrieval.retriever import RetrievedChunk, Retriever
 
-JUDGE_SYSTEM_PROMPT = """You are an impartial, expert AI benchmark judge evaluating a RAG (Retrieval-Augmented Generation) system for a codebase intelligence tool.
+JUDGE_SYSTEM_PROMPT = """You are an impartial, expert AI benchmark judge evaluating a RAG
+(Retrieval-Augmented Generation) system for a codebase intelligence tool.
 
 You will be given:
 1. [User Question]: The software engineering question.
@@ -45,7 +46,8 @@ Evaluate the generation across the RAG Triad:
    - faithfulness_score = (supported_claims / total_claims). If answer admits no info, score is 1.0.
 
 2. ANSWER RELEVANCE:
-   - Score from 0.0 to 1.0 how directly, concisely, and completely the answer addresses the [User Question] compared to the [Reference Summary].
+   - Score from 0.0 to 1.0 how directly, concisely, and completely the answer addresses the [User Question]
+     compared to the [Reference Summary].
    - 1.0: Directly answers the question with accurate code references.
    - 0.5: Vague, partially answers, or includes extraneous filler.
    - 0.0: Irrelevant or completely fails to answer.
@@ -173,9 +175,9 @@ def run_generation_evaluation(
     if limit:
         data = data[:limit]
 
-    print(f"\n=======================================================")
+    print("\n=======================================================")
     print(f"⚖️  RAG Triad Generation Evaluation ({len(data)} test cases)")
-    print(f"=======================================================\n")
+    print("=======================================================\n")
 
     retriever = Retriever()
     generator = AnswerGenerator()
@@ -299,7 +301,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run RAG Triad Generation Evaluation")
     parser.add_argument("--limit", type=int, default=None, help="Limit number of queries evaluated")
     parser.add_argument("--dataset", type=Path, default=Path("evals/dataset.json"), help="Path to golden dataset")
-    parser.add_argument("--output", type=Path, default=Path("evals/generation_benchmark.json"), help="Path to output JSON")
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("evals/generation_benchmark.json"),
+        help="Path to output JSON",
+    )
     args = parser.parse_args()
 
     run_generation_evaluation(dataset_path=args.dataset, limit=args.limit, output_path=args.output)

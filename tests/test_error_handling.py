@@ -1,4 +1,5 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
+
 import pytest
 from fastapi.testclient import TestClient
 from google.genai.errors import APIError
@@ -6,9 +7,7 @@ from google.genai.errors import APIError
 from src.api.main import app, services
 from src.config import settings
 from src.errors import (
-    AEIAError,
     LLMQuotaExceededError,
-    LLMServiceUnavailableError,
     VectorDBUnavailableError,
 )
 from src.generation.generator import AnswerGenerator

@@ -2,12 +2,12 @@ import re
 import sys
 import threading
 from dataclasses import dataclass
-from typing import List, Dict, Tuple
+from typing import Dict, List, Tuple
 
 from fastembed import TextEmbedding
+from flashrank import Ranker, RerankRequest
 from qdrant_client import QdrantClient
 from rank_bm25 import BM25Okapi
-from flashrank import Ranker, RerankRequest
 
 from src.config import settings
 from src.errors import VectorDBUnavailableError

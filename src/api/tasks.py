@@ -1,7 +1,7 @@
 import asyncio
 import threading
 from enum import Enum
-from typing import List, Optional
+from typing import List
 
 
 class IngestionStatus(str, Enum):

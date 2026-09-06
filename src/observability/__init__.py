@@ -9,7 +9,7 @@ and the raw functions execute normally.
 """
 
 import time
-from typing import List, Optional
+from typing import Optional
 
 from langfuse import Langfuse
 
