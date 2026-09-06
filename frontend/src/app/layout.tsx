@@ -1,18 +1,11 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { JetBrains_Mono } from "next/font/google";
 import { siteConfig } from "@/config/site";
-import { Header } from "@/components/common/header";
-import { Footer } from "@/components/common/footer";
 import { Providers } from "@/providers";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const jetbrainsMono = JetBrains_Mono({
+  variable: "--font-jetbrains-mono",
   subsets: ["latin"],
 });
 
@@ -33,14 +26,10 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
+      className={`${jetbrainsMono.variable} dark h-full antialiased`}
     >
-      <body className="flex min-h-full flex-col bg-slate-950 font-sans text-slate-100">
-        <Providers>
-          <Header />
-          <main className="flex-1">{children}</main>
-          <Footer />
-        </Providers>
+      <body className="h-full w-full bg-[#09090b] font-mono text-zinc-100 overflow-hidden antialiased selection:bg-emerald-500/30 selection:text-emerald-200">
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

@@ -88,3 +88,14 @@ export interface TelemetryData {
   model: string;
 }
 
+export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  sources?: SourceCitation[];
+  telemetry?: TelemetryData | null;
+  rewrittenQuery?: string | null;
+  isStreaming?: boolean;
+  timestamp: number;
+}
+

@@ -1,59 +1,80 @@
 "use client";
 
 import * as React from "react";
-import { SourceCitation, TelemetryData } from "@/types/aeia";
+import {
+  PanelLeft,
+  Plus,
+  Settings,
+  Zap,
+} from "lucide-react";
+import { ChatMessage, SourceCitation, TelemetryData } from "@/types/aeia";
 import { aeiaService } from "@/services/aeia.service";
-import { ModeSelector } from "@/components/aeia/mode-selector";
-import { ExamplePrompts } from "@/components/aeia/example-prompts";
+import { ChatSidebar } from "@/components/aeia/chat-sidebar";
+import { ChatMessageItem } from "@/components/aeia/chat-message-item";
 import { QueryInput } from "@/components/aeia/query-input";
 import { EmptyConsole } from "@/components/aeia/empty-console";
-import { ErrorBanner } from "@/components/aeia/error-banner";
-import { QuotaAlert } from "@/components/aeia/quota-alert";
-import { AnswerCard } from "@/components/aeia/answer-card";
 import { CodeModal } from "@/components/aeia/code-modal";
 import { SettingsDialog } from "@/components/aeia/settings-dialog";
+import { QuotaAlert } from "@/components/aeia/quota-alert";
+import { ErrorBanner } from "@/components/aeia/error-banner";
 
 export default function HomePage() {
-  const [activeRoute, setActiveRoute] = React.useState<string | undefined>();
+  const [sidebarOpen, setSidebarOpen] = React.useState(true);
+  const [messages, setMessages] = React.useState<ChatMessage[]>([]);
   const [query, setQuery] = React.useState("");
-  const [submittedQuery, setSubmittedQuery] = React.useState("");
   const [sessionId, setSessionId] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-
-  // Response state
-  const [accumulatedAnswer, setAccumulatedAnswer] = React.useState("");
-  const [sources, setSources] = React.useState<SourceCitation[]>([]);
-  const [rewrittenQuery, setRewrittenQuery] = React.useState<string | null>(null);
-  const [telemetry, setTelemetry] = React.useState<TelemetryData | null>(null);
 
   // Modals
   const [activeCitation, setActiveCitation] = React.useState<SourceCitation | null>(null);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
 
   const abortControllerRef = React.useRef<AbortController | null>(null);
+  const messagesEndRef = React.useRef<HTMLDivElement>(null);
 
-  const resetSession = React.useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    setQuery("");
-    setSubmittedQuery("");
-    setSessionId(null);
-    setLoading(false);
-    setError(null);
-    setAccumulatedAnswer("");
-    setSources([]);
-    setRewrittenQuery(null);
-    setTelemetry(null);
-    setActiveRoute(undefined);
+  const scrollToBottom = React.useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
 
   React.useEffect(() => {
-    const handleReset = () => resetSession();
-    window.addEventListener("aeia:reset-chat", handleReset);
-    return () => window.removeEventListener("aeia:reset-chat", handleReset);
-  }, [resetSession]);
+    scrollToBottom();
+  }, [messages, scrollToBottom]);
+
+  const handleNewChat = React.useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    setMessages([]);
+    setQuery("");
+    setSessionId(null);
+    setLoading(false);
+    setError(null);
+  }, []);
+
+  React.useEffect(() => {
+    const onReset = () => handleNewChat();
+    window.addEventListener("aeia:reset-chat", onReset);
+    return () => window.removeEventListener("aeia:reset-chat", onReset);
+  }, [handleNewChat]);
+
+  const handleStop = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      setLoading(false);
+      setMessages((prev) => {
+        if (prev.length === 0) return prev;
+        const last = prev[prev.length - 1];
+        if (last.role === "assistant" && last.isStreaming) {
+          return [
+            ...prev.slice(0, -1),
+            { ...last, isStreaming: false },
+          ];
+        }
+        return prev;
+      });
+    }
+  };
 
   const handleSubmit = async (overrideQuery?: string) => {
     const targetQuery = (overrideQuery ?? query).trim();
@@ -64,13 +85,29 @@ export default function HomePage() {
     }
 
     setError(null);
-    setSubmittedQuery(targetQuery);
-    setAccumulatedAnswer("");
-    setSources([]);
-    setRewrittenQuery(null);
+    setQuery("");
+
+    // Create user message
+    const userMsg: ChatMessage = {
+      id: `user-${Date.now()}`,
+      role: "user",
+      content: targetQuery,
+      timestamp: Date.now(),
+    };
+
+    // Create placeholder assistant message
+    const assistantId = `assistant-${Date.now()}`;
+    const assistantMsg: ChatMessage = {
+      id: assistantId,
+      role: "assistant",
+      content: "",
+      isStreaming: true,
+      timestamp: Date.now(),
+    };
+
+    setMessages((prev) => [...prev, userMsg, assistantMsg]);
     setLoading(true);
 
-    const startTime = performance.now();
     abortControllerRef.current = new AbortController();
 
     try {
@@ -83,13 +120,8 @@ export default function HomePage() {
         {
           onSources: (incomingSources, incomingSessionId, rewritten, route) => {
             currentSources = incomingSources;
-            setSources(incomingSources);
             if (incomingSessionId) setSessionId(incomingSessionId);
-            if (rewritten) setRewrittenQuery(rewritten);
-            if (route) {
-              resolvedRoute = route;
-              setActiveRoute(route);
-            }
+            if (route) resolvedRoute = route;
 
             const routeLabel =
               resolvedRoute === "git_commit"
@@ -100,15 +132,34 @@ export default function HomePage() {
                 ? "Autonomous Agent → Dependency Mapping"
                 : "Autonomous Engine → Hybrid RAG";
 
-            setTelemetry({
+            const telemetryData: TelemetryData = {
               route: routeLabel,
               latency: "streaming...",
               chunks: incomingSources.length,
               model: "gemini-3.6-flash",
-            });
+            };
+
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantId
+                  ? {
+                      ...m,
+                      sources: incomingSources,
+                      rewrittenQuery: rewritten || m.rewrittenQuery,
+                      telemetry: telemetryData,
+                    }
+                  : m
+              )
+            );
           },
           onToken: (token) => {
-            setAccumulatedAnswer((prev) => prev + token);
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantId
+                  ? { ...m, content: m.content + token }
+                  : m
+              )
+            );
           },
           onDone: (latencyMs, route) => {
             const totalSec = (latencyMs / 1000).toFixed(2);
@@ -122,17 +173,43 @@ export default function HomePage() {
                 ? "Autonomous Agent → Dependency Mapping"
                 : "Autonomous Engine → Hybrid RAG";
 
-            setTelemetry({
+            const finalTelemetry: TelemetryData = {
               route: routeLabel,
               latency: `${totalSec}s`,
               chunks: currentSources.length,
               model: "gemini-3.6-flash",
-            });
+            };
+
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantId
+                  ? {
+                      ...m,
+                      isStreaming: false,
+                      telemetry: finalTelemetry,
+                      sources: currentSources,
+                    }
+                  : m
+              )
+            );
             setLoading(false);
           },
           onError: (err) => {
             setError(err);
             setLoading(false);
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantId
+                  ? {
+                      ...m,
+                      isStreaming: false,
+                      content:
+                        m.content ||
+                        "An error occurred while generating the response. Please check your backend connection.",
+                    }
+                  : m
+              )
+            );
           },
         },
         abortControllerRef.current.signal
@@ -140,78 +217,155 @@ export default function HomePage() {
     } catch (err) {
       if ((err as Error).name !== "AbortError") {
         setError(err instanceof Error ? err.message : "Failed to execute query");
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId
+              ? {
+                  ...m,
+                  isStreaming: false,
+                  content:
+                    m.content ||
+                    "Failed to communicate with backend server. Check your network or API keys.",
+                }
+              : m
+          )
+        );
       }
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSelectExample = (exampleQuery: string) => {
-    setQuery(exampleQuery);
-    handleSubmit(exampleQuery);
-  };
-
-  const isQuotaExceeded =
-    accumulatedAnswer.includes("Upstream AI Quota Exceeded") ||
-    accumulatedAnswer.includes("Gemini generation quota has been temporarily reached") ||
-    Boolean(
-      error &&
-        (error.includes("429") ||
-          error.includes("Quota Exceeded") ||
-          error.includes("RESOURCE_EXHAUSTED") ||
-          error.includes("LLM_QUOTA_EXHAUSTED"))
-    );
+  const isQuotaExceeded = Boolean(
+    error &&
+      (error.includes("429") ||
+        error.includes("Quota Exceeded") ||
+        error.includes("RESOURCE_EXHAUSTED") ||
+        error.includes("LLM_QUOTA_EXHAUSTED"))
+  );
 
   return (
-    <div className="container mx-auto flex max-w-7xl flex-1 flex-col lg:flex-row gap-6 p-4 lg:p-6">
-      {/* Sidebar Controls */}
-      <aside className="lg:w-80 flex flex-col gap-4">
-        <ModeSelector activeRoute={activeRoute} />
-        <ExamplePrompts onSelect={handleSelectExample} disabled={loading} />
-        <div className="rounded-lg border border-border/40 bg-slate-950/40 p-3 text-center text-[11px] text-muted-foreground font-mono">
-          BGE-small (384d) • BM25Okapi • Qdrant • Gemini 3.6 Flash
+    <div className="flex h-screen w-screen overflow-hidden bg-[#09090b] text-zinc-100 font-mono">
+      {/* ChatGPT Collapsible Sidebar */}
+      <ChatSidebar
+        open={sidebarOpen}
+        onToggle={() => setSidebarOpen(false)}
+        onNewChat={handleNewChat}
+        onSelectPrompt={(p) => handleSubmit(p)}
+        onOpenSettings={() => setSettingsOpen(true)}
+        hasMessages={messages.length > 0}
+      />
+
+      {/* Main Chat Viewport */}
+      <div className="flex flex-1 flex-col h-full min-w-0 overflow-hidden bg-[#09090b]">
+        {/* Top App Bar */}
+        <header className="h-12 border-b border-white/8 px-3.5 flex items-center justify-between shrink-0 bg-[#09090b]/85 backdrop-blur z-20">
+          <div className="flex items-center gap-2.5">
+            {!sidebarOpen && (
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-900 transition"
+                title="Open sidebar"
+              >
+                <PanelLeft className="size-4" />
+              </button>
+            )}
+
+            <div className="flex items-center gap-2">
+              <div className="flex size-6 items-center justify-center rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold">
+                <Zap className="size-3.5" />
+              </div>
+              <span className="font-semibold text-xs tracking-tight text-white font-mono">
+                AEIA
+              </span>
+              <span className="text-[11px] text-zinc-500 hidden sm:inline border-l border-white/8 pl-2">
+                Campus Connect (~94k LOC)
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 text-xs">
+            <button
+              onClick={handleNewChat}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-zinc-300 hover:text-white hover:bg-zinc-900 transition text-xs font-mono font-medium border border-white/6"
+              title="Start new conversation"
+            >
+              <Plus className="size-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">New Chat</span>
+            </button>
+
+            <button
+              onClick={() => setSettingsOpen(true)}
+              className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-900 transition"
+              title="Settings"
+            >
+              <Settings className="size-4" />
+            </button>
+          </div>
+        </header>
+
+        {/* Scrollable Conversation Stream */}
+        <div className="flex-1 overflow-y-auto px-4 py-4 scroll-smooth">
+          <div className="max-w-3xl mx-auto w-full min-h-full flex flex-col justify-between">
+            {messages.length === 0 ? (
+              <EmptyConsole onSelectPrompt={(p) => handleSubmit(p)} />
+            ) : (
+              <div className="space-y-4 pb-4">
+                {isQuotaExceeded && (
+                  <QuotaAlert
+                    onRetry={() => {
+                      const lastUser = [...messages]
+                        .reverse()
+                        .find((m) => m.role === "user");
+                      if (lastUser) handleSubmit(lastUser.content);
+                    }}
+                    onOpenSettings={() => setSettingsOpen(true)}
+                  />
+                )}
+
+                {error && !isQuotaExceeded && (
+                  <ErrorBanner
+                    error={error}
+                    onOpenSettings={() => setSettingsOpen(true)}
+                  />
+                )}
+
+                {messages.map((m) => (
+                  <ChatMessageItem
+                    key={m.id}
+                    message={m}
+                    onSelectCitation={setActiveCitation}
+                  />
+                ))}
+                <div ref={messagesEndRef} />
+              </div>
+            )}
+          </div>
         </div>
-      </aside>
 
-      {/* Main Console */}
-      <main className="flex-1 flex flex-col gap-4">
-        <QueryInput
-          query={query}
-          onQueryChange={setQuery}
-          onSubmit={() => handleSubmit()}
-          loading={loading}
-        />
-
-        <div className="flex-1 rounded-xl border border-border/70 bg-slate-900/80 p-5 shadow-sm min-h-[420px] flex flex-col">
-          {isQuotaExceeded && (
-            <QuotaAlert
-              onRetry={() => handleSubmit(submittedQuery)}
-              onOpenSettings={() => setSettingsOpen(true)}
-            />
-          )}
-
-          {!isQuotaExceeded && (
-            <ErrorBanner error={error} onOpenSettings={() => setSettingsOpen(true)} />
-          )}
-
-          {!submittedQuery && !loading ? (
-            <EmptyConsole />
-          ) : (
-            <AnswerCard
-              question={submittedQuery}
-              answer={accumulatedAnswer}
-              rewrittenQuery={rewrittenQuery}
-              loading={loading}
-              telemetry={telemetry}
-              sources={sources}
-              onSelectCitation={setActiveCitation}
-            />
-          )}
+        {/* Docked Bottom Input (ChatGPT Style) */}
+        <div className="shrink-0 bg-gradient-to-t from-[#09090b] via-[#09090b]/95 to-transparent pt-2">
+          <QueryInput
+            query={query}
+            onQueryChange={setQuery}
+            onSubmit={() => handleSubmit()}
+            onStop={handleStop}
+            loading={loading}
+          />
         </div>
-      </main>
+      </div>
 
-      <CodeModal citation={activeCitation} onClose={() => setActiveCitation(null)} />
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      {/* Code Viewer Modal */}
+      <CodeModal
+        citation={activeCitation}
+        onClose={() => setActiveCitation(null)}
+      />
+
+      {/* Settings Dialog */}
+      <SettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+      />
     </div>
   );
 }
