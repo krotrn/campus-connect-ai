@@ -20,7 +20,7 @@ def auth_headers():
 
 def test_stream_requires_auth(client):
     response = client.post("/ask/stream", json={"question": "Where is auth?"})
-    assert response.status_code == 422  # Missing header
+    assert response.status_code == 401  # Missing credential, not a validation error
 
 
 def test_stream_rejects_wrong_key(client):

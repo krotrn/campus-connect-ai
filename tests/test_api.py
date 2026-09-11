@@ -43,7 +43,7 @@ def test_ask_requires_api_key(client):
     """Requests without X-API-Key header should be rejected."""
     payload = {"question": "Where is auth implemented?", "top_k": 3}
     response = client.post("/ask", json=payload)
-    assert response.status_code == 422  # missing required header
+    assert response.status_code == 401  # missing credential, not a validation error
 
 
 def test_ask_rejects_wrong_api_key(client):
@@ -90,7 +90,7 @@ def test_ingest_status(client):
 def test_ingest_requires_api_key(client):
     """POST /ingest should require auth."""
     response = client.post("/ingest")
-    assert response.status_code == 422  # missing required header
+    assert response.status_code == 401  # missing credential, not a validation error
 
 
 def test_ingest_rejects_wrong_key(client):

@@ -1,7 +1,8 @@
 import json
+import logging
+import secrets
 import time
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
@@ -26,10 +27,14 @@ from src.errors import (
     LLMQuotaExceededError,
 )
 from src.generation.generator import AnswerGenerator, SourceCitation
+from src.logging_config import configure_logging
 from src.mcp import get_streamable_http_app, mcp_server
 from src.observability import flush as langfuse_flush
 from src.observability import init_langfuse, traced_ask
 from src.retrieval.retriever import Retriever
+
+configure_logging()
+logger = logging.getLogger(__name__)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Rate Limiter
@@ -44,7 +49,7 @@ services = {}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("🚀 Initializing AEIA Retriever, Generator, Agent, and MCP Server...")
+    logger.info("Initializing AEIA Retriever, Generator, Agent, and MCP Server...")
     retriever = Retriever()
     generator = AnswerGenerator()
     services["retriever"] = retriever
@@ -122,17 +127,22 @@ async def google_api_error_handler(request: Request, exc: APIError):
         )
 
 
+def _api_key_matches(candidate: str | None) -> bool:
+    """Constant-time API key comparison to avoid leaking the key by timing."""
+    return bool(candidate) and secrets.compare_digest(candidate, settings.api_key)
+
+
 # Mount Model Context Protocol (MCP) Streamable HTTP endpoint (2026-07-28 spec)
 # Mount MCP with API key authentication middleware
 _mcp_app = get_streamable_http_app()
 _original_mcp_app_call = _mcp_app.__call__
 
+
 async def _authenticated_mcp(scope, receive, send):
     """ASGI middleware that enforces X-API-Key on the MCP mount."""
     if scope["type"] == "http":
         headers = dict((k.decode(), v.decode()) for k, v in scope.get("headers", []))
-        api_key = headers.get("x-api-key", "")
-        if api_key != settings.api_key:
+        if not _api_key_matches(headers.get("x-api-key")):
             response = StarletteJSONResponse(
                 status_code=401,
                 content={"error": "Unauthorized", "message": "Invalid or missing API key for MCP endpoint."},
@@ -141,23 +151,27 @@ async def _authenticated_mcp(scope, receive, send):
             return
     await _original_mcp_app_call(scope, receive, send)
 
+
 app.mount("/mcp", _authenticated_mcp)
 
+# CORS is restricted to the configured console origins. A wildcard origin
+# combined with allow_credentials is rejected by browsers, and this API is
+# meant to be reached through the console's server-side proxy anyway.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=settings.cors_allow_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "X-API-Key", "X-Gemini-API-Key", "Accept"],
 )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Auth dependency
 # ─────────────────────────────────────────────────────────────────────────────
-async def verify_api_key(x_api_key: str = Header(..., alias="X-API-Key")):
+def verify_api_key(x_api_key: str | None = Header(default=None, alias="X-API-Key")):
     """Validate the X-API-Key header against the configured key."""
-    if x_api_key != settings.api_key:
+    if not _api_key_matches(x_api_key):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing API key",
@@ -182,7 +196,10 @@ class AskRequest(BaseModel):
     )
     use_agent: bool = Field(
         default=False,
-        description="Route query through LangGraph state machine with non-RAG tools",
+        description=(
+            "Force the LangGraph agent even for queries the router sends to direct RAG. "
+            "Non-RAG routes (git history, commit diffs, dependencies) always use the agent."
+        ),
     )
     session_id: str | None = Field(
         default=None,
@@ -207,6 +224,7 @@ class AskResponse(BaseModel):
     rewritten_question: str | None = None
     route: str | None = None
     route_reasoning: str | None = None
+    model: str | None = None
 
 
 class AgentAskRequest(BaseModel):
@@ -275,7 +293,7 @@ async def root():
 
 
 @app.get("/health", response_model=HealthResponse, tags=["General"])
-async def health_check():
+def health_check():
     retriever: Retriever | None = services.get("retriever")
     if not retriever:
         raise HTTPException(
@@ -294,32 +312,63 @@ async def health_check():
             qdrant_url=settings.qdrant_url,
         )
     except Exception as e:
+        logger.warning("Health check failed: %s", e)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Qdrant connection error: {str(e)}",
         )
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Shared request helpers
+# ─────────────────────────────────────────────────────────────────────────────
+def _resolve_gemini_key(request: Request, body_key: str | None) -> str | None:
+    """Client-supplied Gemini key from the body or the X-Gemini-API-Key header."""
+    return (
+        (body_key or "").strip()
+        or request.headers.get("x-gemini-api-key", "").strip()
+        or None
+    )
+
+
+def _build_rewriter_client(
+    gemini_api_key: str | None,
+    generator: AnswerGenerator | None,
+) -> genai.Client | None:
+    if gemini_api_key:
+        return genai.Client(api_key=gemini_api_key)
+    return generator.client if generator else None
+
+
+def _sse(payload: dict[str, Any]) -> str:
+    return f"data: {json.dumps(payload)}\n\n"
+
+
 def _stream_ask_response(
-    request: Request,
     body: AskRequest,
     search_query: str,
     session_id: str,
     session_mem: Any,
     retriever: Retriever,
     generator: AnswerGenerator,
+    route: str,
+    reasoning: str,
+    target: str | None,
     agent: Any | None = None,
     gemini_api_key: str | None = None,
 ):
     start_time = time.time()
-    route, reasoning, target = route_query(search_query)
+    use_agent = agent is not None and (route != "direct_rag" or body.use_agent)
 
     def event_generator():
         try:
-            if route != "direct_rag" and agent:
+            if use_agent:
                 final_state = agent.invoke({
                     "question": search_query,
                     "top_k": body.top_k,
+                    "route": route,
+                    "route_reasoning": reasoning,
+                    "target": target,
                     "steps_taken": ["received_query"],
                     "gemini_api_key": gemini_api_key,
                 })
@@ -327,29 +376,27 @@ def _stream_ask_response(
                 answer_text = final_state.get("answer", "")
                 sources = final_state.get("sources", [])
 
-                payload = {
+                yield _sse({
                     "type": "sources",
                     "sources": sources,
                     "session_id": session_id,
                     "rewritten_question": search_query if search_query != body.question else None,
                     "route": route,
                     "route_reasoning": reasoning,
-                }
-                yield f"data: {json.dumps(payload)}\n\n"
+                })
 
-                lines = answer_text.splitlines(keepends=True)
-                for line in lines:
-                    yield f"data: {json.dumps({'type': 'token', 'text': line})}\n\n"
+                for line in answer_text.splitlines(keepends=True):
+                    yield _sse({"type": "token", "text": line})
 
                 session_mem.add_turn(body.question, answer_text)
-                done_payload = {
+                yield _sse({
                     "type": "done",
                     "latency_ms": latency_ms,
                     "session_id": session_id,
                     "route": route,
                     "route_reasoning": reasoning,
-                }
-                yield f"data: {json.dumps(done_payload)}\n\n"
+                    "model": settings.gemini_model if gemini_api_key or settings.has_gemini_key else None,
+                })
             else:
                 chunks = retriever.retrieve(search_query, top_k=body.top_k)
                 full_answer = []
@@ -360,32 +407,40 @@ def _stream_ask_response(
                     api_key=gemini_api_key,
                 ):
                     if event["type"] == "sources":
-                        payload = {
+                        yield _sse({
                             "type": "sources",
                             "sources": event["sources"],
                             "session_id": session_id,
                             "rewritten_question": search_query if search_query != body.question else None,
                             "route": "direct_rag",
                             "route_reasoning": reasoning,
-                        }
-                        yield f"data: {json.dumps(payload)}\n\n"
+                        })
                     elif event["type"] == "token":
                         full_answer.append(event["text"])
-                        yield f"data: {json.dumps({'type': 'token', 'text': event['text']})}\n\n"
+                        yield _sse({"type": "token", "text": event["text"]})
                     elif event["type"] == "done":
                         latency_ms = round((time.time() - start_time) * 1000, 2)
-                        final_text = "".join(full_answer)
-                        session_mem.add_turn(body.question, final_text)
-                        done_payload = {
+                        session_mem.add_turn(body.question, "".join(full_answer))
+                        yield _sse({
                             "type": "done",
                             "latency_ms": latency_ms,
                             "session_id": session_id,
                             "route": "direct_rag",
                             "route_reasoning": reasoning,
-                        }
-                        yield f"data: {json.dumps(done_payload)}\n\n"
-        except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+                            "model": event.get("model"),
+                        })
+        except AEIAError as e:
+            logger.error("Stream failed: %s", e, exc_info=True)
+            yield _sse({"type": "error", "error": e.message, "code": e.error_code})
+        except Exception:
+            # Never leak raw exception text (which can carry internal hosts and
+            # credentials) to the browser; the detail goes to the server log.
+            logger.exception("Unhandled error while streaming answer")
+            yield _sse({
+                "type": "error",
+                "error": "An internal error occurred while generating the answer.",
+                "code": "INTERNAL_ERROR",
+            })
 
     return StreamingResponse(
         event_generator(),
@@ -398,17 +453,12 @@ def _stream_ask_response(
     )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Protected endpoints (auth + rate limit)
-# ─────────────────────────────────────────────────────────────────────────────
-@app.post(
-    "/ask",
-    response_model=AskResponse,
-    tags=["RAG"],
-    dependencies=[Depends(verify_api_key)],
-)
-@limiter.limit(settings.rate_limit)
-async def ask_question(request: Request, body: AskRequest):
+def _ask_impl(request: Request, body: AskRequest):
+    """Shared implementation behind /ask and /ask/stream.
+
+    Kept separate from the rate-limited route functions so that /ask/stream
+    delegating to it does not consume the caller's rate budget twice.
+    """
     retriever: Retriever | None = services.get("retriever")
     generator: AnswerGenerator | None = services.get("generator")
     agent = services.get("agent")
@@ -423,42 +473,43 @@ async def ask_question(request: Request, body: AskRequest):
     session_id, session_mem = memory_manager.get_or_create(body.session_id)
     history = session_mem.get_history()
 
-    # Determine effective client-provided or header-provided Gemini API key
-    effective_gemini_key = (
-        (body.gemini_api_key or "").strip()
-        or request.headers.get("x-gemini-api-key", "").strip()
-        or request.headers.get("X-Gemini-API-Key", "").strip()
-        or None
-    )
+    effective_gemini_key = _resolve_gemini_key(request, body.gemini_api_key)
 
     # Coreference resolution / search query expansion
-    rewriter_client = None
-    if effective_gemini_key:
-        rewriter_client = genai.Client(api_key=effective_gemini_key)
-    elif generator:
-        rewriter_client = generator.client
+    search_query = rewrite_query_with_history(
+        body.question,
+        history,
+        client=_build_rewriter_client(effective_gemini_key, generator),
+    )
 
-    search_query = rewrite_query_with_history(body.question, history, client=rewriter_client)
+    # Route once, then reuse the decision for both the streaming branch and the
+    # agent graph so ambiguous queries cost a single classification call.
+    route, reasoning, target = route_query(search_query, api_key=effective_gemini_key)
 
     # If client requested Server-Sent Events (SSE) streaming
     if body.stream or "text/event-stream" in request.headers.get("accept", ""):
         return _stream_ask_response(
-            request=request,
             body=body,
             search_query=search_query,
             session_id=session_id,
             session_mem=session_mem,
             retriever=retriever,
             generator=generator,
+            route=route,
+            reasoning=reasoning,
+            target=target,
             agent=agent,
             gemini_api_key=effective_gemini_key,
         )
 
     try:
-        if body.use_agent and agent:
+        if agent and (route != "direct_rag" or body.use_agent):
             final_state = agent.invoke({
                 "question": search_query,
                 "top_k": body.top_k,
+                "route": route,
+                "route_reasoning": reasoning,
+                "target": target,
                 "steps_taken": ["received_query"],
                 "gemini_api_key": effective_gemini_key,
             })
@@ -483,8 +534,8 @@ async def ask_question(request: Request, body: AskRequest):
                 latency_ms=latency_ms,
                 session_id=session_id,
                 rewritten_question=search_query if search_query != body.question else None,
-                route=final_state.get("route", "direct_rag"),
-                route_reasoning=final_state.get("route_reasoning", ""),
+                route=final_state.get("route", route),
+                route_reasoning=final_state.get("route_reasoning", reasoning),
             )
 
         result = traced_ask(
@@ -505,15 +556,35 @@ async def ask_question(request: Request, body: AskRequest):
             session_id=session_id,
             rewritten_question=search_query if search_query != body.question else None,
             route="direct_rag",
-            route_reasoning="Direct RAG invocation",
+            route_reasoning=reasoning or "Direct RAG invocation",
         )
     except (AEIAError, APIError, HTTPException):
         raise
     except Exception as e:
+        logger.exception("Error processing question")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error processing question: {str(e)}",
         )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Protected endpoints (auth + rate limit)
+#
+# These are defined with `def`, not `async def`, on purpose: the RAG pipeline is
+# synchronous and slow (embedding, Qdrant I/O, multi-second LLM calls). FastAPI
+# runs sync handlers in a worker threadpool, so one in-flight question no longer
+# blocks the event loop — and therefore every other request — for its duration.
+# ─────────────────────────────────────────────────────────────────────────────
+@app.post(
+    "/ask",
+    response_model=AskResponse,
+    tags=["RAG"],
+    dependencies=[Depends(verify_api_key)],
+)
+@limiter.limit(settings.rate_limit)
+def ask_question(request: Request, body: AskRequest):
+    return _ask_impl(request, body)
 
 
 @app.post(
@@ -522,10 +593,10 @@ async def ask_question(request: Request, body: AskRequest):
     dependencies=[Depends(verify_api_key)],
 )
 @limiter.limit(settings.rate_limit)
-async def ask_question_stream(request: Request, body: AskRequest):
+def ask_question_stream(request: Request, body: AskRequest):
     """Dedicated Server-Sent Events (SSE) streaming endpoint."""
     body.stream = True
-    return await ask_question(request, body)
+    return _ask_impl(request, body)
 
 
 @app.post(
@@ -535,7 +606,7 @@ async def ask_question_stream(request: Request, body: AskRequest):
     dependencies=[Depends(verify_api_key)],
 )
 @limiter.limit(settings.rate_limit)
-async def agent_ask(request: Request, body: AgentAskRequest):
+def agent_ask(request: Request, body: AgentAskRequest):
     agent = services.get("agent")
     generator: AnswerGenerator | None = services.get("generator")
     if not agent:
@@ -548,22 +619,14 @@ async def agent_ask(request: Request, body: AgentAskRequest):
     session_id, session_mem = memory_manager.get_or_create(body.session_id)
     history = session_mem.get_history()
 
-    # Determine effective client-provided or header-provided Gemini API key
-    effective_gemini_key = (
-        (body.gemini_api_key or "").strip()
-        or request.headers.get("x-gemini-api-key", "").strip()
-        or request.headers.get("X-Gemini-API-Key", "").strip()
-        or None
-    )
+    effective_gemini_key = _resolve_gemini_key(request, body.gemini_api_key)
 
     # Coreference resolution / search query expansion
-    rewriter_client = None
-    if effective_gemini_key:
-        rewriter_client = genai.Client(api_key=effective_gemini_key)
-    elif generator:
-        rewriter_client = generator.client
-
-    search_query = rewrite_query_with_history(body.question, history, client=rewriter_client)
+    search_query = rewrite_query_with_history(
+        body.question,
+        history,
+        client=_build_rewriter_client(effective_gemini_key, generator),
+    )
 
     try:
         final_state = agent.invoke({
@@ -590,6 +653,7 @@ async def agent_ask(request: Request, body: AgentAskRequest):
     except (AEIAError, APIError, HTTPException):
         raise
     except Exception as e:
+        logger.exception("Error executing agent workflow")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error executing agent workflow: {str(e)}",

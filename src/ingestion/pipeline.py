@@ -1,5 +1,5 @@
 import hashlib
-import json
+import logging
 import time
 from pathlib import Path
 
@@ -17,6 +17,9 @@ from tqdm import tqdm
 
 from src.config import settings
 from src.ingestion.chunker import CodeAwareChunker, CodeChunk
+from src.ingestion.embedding_cache import EmbeddingCache, content_hash
+
+logger = logging.getLogger(__name__)
 
 IGNORE_DIRS = {
     "node_modules",
@@ -51,52 +54,6 @@ ALLOWED_FILENAMES = {
 IGNORE_FILES = {"pnpm-lock.yaml", "package-lock.json", "yarn.lock"}
 
 BATCH_SIZE = 128
-CACHE_DIR = Path(".cache")
-EMBEDDING_CACHE_FILE = CACHE_DIR / "embedding_cache.json"
-
-
-class EmbeddingCache:
-    """
-    Caches embeddings keyed by SHA-256 hash of chunk content.
-    On re-ingestion, only chunks with new/changed content are embedded.
-    """
-
-    def __init__(self, cache_path: Path = EMBEDDING_CACHE_FILE):
-        self.cache_path = cache_path
-        self._cache: dict[str, list[float]] = {}
-        self._load()
-
-    def _load(self):
-        if self.cache_path.exists():
-            try:
-                raw = json.loads(self.cache_path.read_text(encoding="utf-8"))
-                self._cache = raw
-                print(f"📦 Loaded embedding cache: {len(self._cache)} entries")
-            except (json.JSONDecodeError, OSError):
-                print("⚠️  Cache file corrupted, starting fresh")
-                self._cache = {}
-        else:
-            print("📦 No embedding cache found, will create one after ingestion")
-
-    def save(self):
-        self.cache_path.parent.mkdir(parents=True, exist_ok=True)
-        self.cache_path.write_text(
-            json.dumps(self._cache), encoding="utf-8"
-        )
-        print(f"💾 Saved embedding cache: {len(self._cache)} entries")
-
-    @staticmethod
-    def _hash(text: str) -> str:
-        return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-    def get(self, content: str) -> list[float] | None:
-        return self._cache.get(self._hash(content))
-
-    def put(self, content: str, embedding: list[float]):
-        self._cache[self._hash(content)] = embedding
-
-    def __len__(self):
-        return len(self._cache)
 
 
 def _point_id(file_path: str, chunk_index: int) -> int:
@@ -116,6 +73,7 @@ class IngestionPipeline:
             url=settings.qdrant_url,
             api_key=settings.qdrant_api_key if settings.qdrant_api_key else None,
             check_compatibility=False,
+            timeout=settings.qdrant_timeout,
         )
         self.chunker = CodeAwareChunker()
         self.embedding_model = TextEmbedding(model_name=settings.embedding_model)
@@ -124,12 +82,16 @@ class IngestionPipeline:
     def init_collection(self, recreate: bool = False):
         collections = [c.name for c in self.client.get_collections().collections]
         if settings.collection_name in collections and recreate:
-            print(f"Recreating connection '{settings.collection_name}'...")
+            logger.info("Recreating collection '%s'...", settings.collection_name)
             self.client.delete_collection(collection_name=settings.collection_name)
             collections.remove(settings.collection_name)
 
         if settings.collection_name not in collections:
-            print(f"Creating collection '{settings.collection_name}' ({settings.embedding_dim} dim, Cosine)...")
+            logger.info(
+                "Creating collection '%s' (%d dim, Cosine)...",
+                settings.collection_name,
+                settings.embedding_dim,
+            )
             self.client.create_collection(
                 collection_name=settings.collection_name,
                 vectors_config=VectorParams(size=settings.embedding_dim, distance=Distance.COSINE),
@@ -166,22 +128,21 @@ class IngestionPipeline:
         Only computes new embeddings for chunks not in the cache.
         """
         embeddings: list[list[float] | None] = [None] * len(chunks)
-        to_embed: list[tuple[int, str]] = []  # (index, content)
+        hashes = [content_hash(c.content) for c in chunks]
+        cached = self.cache.get_many(hashes)
 
-        # Check cache first
-        cache_hits = 0
+        to_embed: list[tuple[int, str]] = []  # (index, content)
         for i, chunk in enumerate(chunks):
-            cached = self.cache.get(chunk.content)
-            if cached is not None:
-                embeddings[i] = cached
-                cache_hits += 1
+            hit = cached.get(hashes[i])
+            if hit is not None:
+                embeddings[i] = hit
             else:
                 to_embed.append((i, chunk.content))
 
-        print(f"   Cache: {cache_hits} hits, {len(to_embed)} misses")
+        logger.info("Embedding cache: %d hits, %d misses", len(chunks) - len(to_embed), len(to_embed))
 
         if not to_embed:
-            return embeddings  # type: ignore
+            return embeddings  # type: ignore[return-value]
 
         # Embed only the misses, in batches
         texts = [t[1] for t in to_embed]
@@ -192,18 +153,64 @@ class IngestionPipeline:
                 batch_texts = texts[b_idx * BATCH_SIZE : (b_idx + 1) * BATCH_SIZE]
                 batch_embeddings = list(self.embedding_model.embed(batch_texts))
 
+                new_entries = []
                 for j, emb in enumerate(batch_embeddings):
                     global_j = b_idx * BATCH_SIZE + j
                     orig_idx = to_embed[global_j][0]
-                    content = to_embed[global_j][1]
                     emb_list = emb.tolist()
 
                     embeddings[orig_idx] = emb_list
-                    self.cache.put(content, emb_list)
+                    new_entries.append((hashes[orig_idx], emb_list))
 
+                # Commit each batch so an interrupted run keeps its progress.
+                self.cache.put_many(new_entries)
                 pbar.update(len(batch_texts))
 
-        return embeddings  # type: ignore
+        return embeddings  # type: ignore[return-value]
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Qdrant point maintenance
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _scroll_point_keys(self) -> list[tuple[int, str, int]]:
+        """Return (point_id, file_path, chunk_index) for every indexed point."""
+        keys: list[tuple[int, str, int]] = []
+        next_offset = None
+        while True:
+            records, next_offset = self.client.scroll(
+                collection_name=settings.collection_name,
+                limit=512,
+                offset=next_offset,
+                with_payload=["file_path", "chunk_index"],
+                with_vectors=False,
+            )
+            for r in records:
+                payload = r.payload or {}
+                keys.append((r.id, payload.get("file_path", ""), payload.get("chunk_index", -1)))
+            if next_offset is None:
+                break
+        return keys
+
+    def _prune_stale_points(self, live_chunks: list[CodeChunk]) -> int:
+        """Delete indexed points that no longer correspond to a current chunk.
+
+        Covers both files deleted from the corpus and files that now produce
+        fewer chunks than before — neither of which an upsert-only pass removes.
+        """
+        live_keys = {(c.file_path, c.chunk_index) for c in live_chunks}
+        stale_ids = [
+            point_id
+            for point_id, file_path, chunk_index in self._scroll_point_keys()
+            if (file_path, chunk_index) not in live_keys
+        ]
+
+        if stale_ids:
+            logger.info("Pruning %d stale points (deleted or re-chunked files).", len(stale_ids))
+            self.client.delete(
+                collection_name=settings.collection_name,
+                points_selector=stale_ids,
+            )
+        return len(stale_ids)
 
     def _delete_points_for_file(self, rel_path: str) -> int:
         """Delete all Qdrant points whose ``file_path`` payload matches *rel_path*.
@@ -271,6 +278,16 @@ class IngestionPipeline:
     # ─────────────────────────────────────────────────────────────────────────
 
     def run(self, recreate: bool = False):
+        """Re-index the whole corpus.
+
+        With ``recreate=False`` (the default) this is a non-destructive sync:
+        every chunk is upserted under its deterministic point ID and only then
+        are stale points pruned.  The collection stays queryable throughout, so
+        a re-ingest no longer blanks out ``/ask`` for its duration.
+
+        ``recreate=True`` drops the collection first.  That means downtime, so
+        reserve it for schema changes (e.g. a different embedding dimension).
+        """
         start_time = time.time()
         self.init_collection(recreate=recreate)
 
@@ -279,7 +296,7 @@ class IngestionPipeline:
             raise FileNotFoundError(f"Corpus directory not found at {corpus_path}")
 
         files = self.scan_files(corpus_path)
-        print(f"Found {len(files)} files to ingest from {corpus_path}")
+        logger.info("Found %d files to ingest from %s", len(files), corpus_path)
 
         all_chunks: list[CodeChunk] = []
         for file_path in tqdm(files, desc="Parsing files", unit="file"):
@@ -287,21 +304,26 @@ class IngestionPipeline:
             chunks = self.chunker.chunk_file(file_path, rel_path)
             all_chunks.extend(chunks)
 
-        print(f"Generated {len(all_chunks)} total chunks. Resolving embeddings...")
+        logger.info("Generated %d total chunks. Resolving embeddings...", len(all_chunks))
 
-        # Get embeddings (cached + newly computed)
         all_embeddings = self._get_embeddings(all_chunks)
 
-        # Upload to Qdrant in batches
-        # Use deterministic point IDs (same as incremental ingestion) for idempotent upserts
+        # Upsert first, prune second: the collection never has a window where
+        # current content is missing.
         self._upsert_chunks(all_chunks, all_embeddings)
+        pruned = 0 if recreate else self._prune_stale_points(all_chunks)
 
-        # Save cache after successful ingestion
         self.cache.save()
 
         elapsed = time.time() - start_time
-        print(f"\nIngestion Complete! Ingested {len(all_chunks)} chunks across {len(files)} files in {elapsed:.2f}s.")
-        return {"files": len(files), "chunks": len(all_chunks)}
+        logger.info(
+            "Ingestion complete: %d chunks across %d files in %.2fs (%d stale points pruned).",
+            len(all_chunks),
+            len(files),
+            elapsed,
+            pruned,
+        )
+        return {"files": len(files), "chunks": len(all_chunks), "pruned_points": pruned}
 
     # ─────────────────────────────────────────────────────────────────────────
     # Incremental (delta-only) ingestion
@@ -342,17 +364,22 @@ class IngestionPipeline:
                 all_chunks.extend(chunks)
 
         if all_chunks:
-            print(f"   Re-chunking {len(all_chunks)} chunks from {len(changed_files)} changed files...")
+            logger.info(
+                "Re-chunking %d chunks from %d changed files...", len(all_chunks), len(changed_files)
+            )
             embeddings = self._get_embeddings(all_chunks)
             self._upsert_chunks(all_chunks, embeddings)
 
         self.cache.save()
 
         elapsed = time.time() - start_time
-        print(
-            f"\n✅ Incremental ingestion done in {elapsed:.2f}s: "
-            f"{len(changed_files)} files touched, {total_deleted} stale points removed, "
-            f"{len(all_chunks)} chunks upserted."
+        logger.info(
+            "Incremental ingestion done in %.2fs: %d files touched, %d stale points removed, "
+            "%d chunks upserted.",
+            elapsed,
+            len(changed_files),
+            total_deleted,
+            len(all_chunks),
         )
         return {
             "files": len(changed_files),
@@ -362,5 +389,19 @@ class IngestionPipeline:
 
 
 if __name__ == "__main__":
+    import argparse
+
+    from src.logging_config import configure_logging
+
+    configure_logging()
+
+    parser = argparse.ArgumentParser(description="Ingest the target corpus into Qdrant.")
+    parser.add_argument(
+        "--recreate",
+        action="store_true",
+        help="Drop and rebuild the collection (causes query downtime; needed for schema changes).",
+    )
+    args = parser.parse_args()
+
     pipeline = IngestionPipeline()
-    pipeline.run(recreate=True)
+    pipeline.run(recreate=args.recreate)

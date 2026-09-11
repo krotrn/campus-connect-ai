@@ -1,6 +1,9 @@
 import asyncio
+import logging
 import threading
 from enum import StrEnum
+
+logger = logging.getLogger(__name__)
 
 
 class IngestionStatus(StrEnum):
@@ -26,6 +29,21 @@ def _update_state(**kwargs):
         _state.update(kwargs)
 
 
+def _claim_run() -> bool:
+    """Atomically mark ingestion as RUNNING.
+
+    Returns True if this caller won the claim, False if a run is already in
+    flight. Checking the status and setting it must happen under one lock:
+    otherwise two concurrent /ingest requests can both pass the check, and a
+    full ingest recreates the collection.
+    """
+    with _state_lock:
+        if _state["status"] == IngestionStatus.RUNNING:
+            return False
+        _state.update(status=IngestionStatus.RUNNING, error=None)
+        return True
+
+
 def get_status() -> dict:
     with _state_lock:
         return dict(_state)
@@ -40,7 +58,7 @@ def _hot_reload_retriever():
         if retriever:
             retriever.reload_bm25()
     except Exception as e:
-        print(f"⚠️ Could not reload in-memory BM25 index: {e}")
+        logger.warning("Could not reload in-memory BM25 index: %s", e)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -53,13 +71,11 @@ async def trigger_ingestion() -> bool:
     Launch full ingestion in a background thread.
     Returns False if already running.
     """
-    if _state["status"] == IngestionStatus.RUNNING:
+    if not _claim_run():
         return False
 
-    _update_state(status=IngestionStatus.RUNNING, error=None)
-
-    loop = asyncio.get_event_loop()
-    asyncio.ensure_future(_run_full_in_background(loop))
+    loop = asyncio.get_running_loop()
+    loop.create_task(_run_full_in_background(loop))
     return True
 
 
@@ -72,6 +88,7 @@ async def _run_full_in_background(loop: asyncio.AbstractEventLoop):
             files_processed=result.get("files", 0),
         )
     except Exception as e:
+        logger.exception("Full ingestion failed")
         _update_state(status=IngestionStatus.FAILED, error=str(e))
 
 
@@ -79,8 +96,10 @@ def _sync_full_ingest() -> dict:
     """Run the full ingestion pipeline synchronously (called in a thread)."""
     from src.ingestion.pipeline import IngestionPipeline
 
+    # Non-destructive full sync: upsert everything, then prune stale points.
+    # Using recreate=True here would blank the collection for the whole run.
     pipeline = IngestionPipeline()
-    result = pipeline.run(recreate=True)
+    result = pipeline.run(recreate=False)
 
     _hot_reload_retriever()
 
@@ -103,13 +122,11 @@ async def trigger_incremental_ingestion(changed_files: list[str]) -> bool:
     Launch incremental ingestion for *changed_files* in a background thread.
     Returns False if already running.
     """
-    if _state["status"] == IngestionStatus.RUNNING:
+    if not _claim_run():
         return False
 
-    _update_state(status=IngestionStatus.RUNNING, error=None)
-
-    loop = asyncio.get_event_loop()
-    asyncio.ensure_future(_run_incremental_in_background(loop, changed_files))
+    loop = asyncio.get_running_loop()
+    loop.create_task(_run_incremental_in_background(loop, changed_files))
     return True
 
 
@@ -125,6 +142,7 @@ async def _run_incremental_in_background(
             files_processed=result.get("files", 0),
         )
     except Exception as e:
+        logger.exception("Incremental ingestion failed")
         _update_state(status=IngestionStatus.FAILED, error=str(e))
 
 

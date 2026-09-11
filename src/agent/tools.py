@@ -1,8 +1,16 @@
+import logging
+import os
 import re
 import subprocess
 from pathlib import Path
 
 from src.config import settings
+
+logger = logging.getLogger(__name__)
+
+# Directories never worth scanning for source dependencies.
+SCAN_IGNORE_DIRS = {"node_modules", ".next", ".git", "dist", "build", "coverage"}
+CODE_EXTENSIONS = {".ts", ".tsx", ".js", ".jsx", ".mjs"}
 
 
 def _get_corpus_dir() -> Path:
@@ -44,8 +52,10 @@ def get_git_commit_history(max_count: int = 5, path: str | None = None) -> str:
         output = res.stdout.strip()
         return output if output else "No git commit history found."
     except subprocess.CalledProcessError as e:
+        logger.warning("git log failed: %s", e.stderr.strip())
         return f"Error executing git log: {e.stderr.strip()}"
     except Exception as e:
+        logger.warning("git log failed: %s", e)
         return f"Error retrieving git history: {str(e)}"
 
 
@@ -72,8 +82,10 @@ def get_commit_details(commit_hash: str) -> str:
         )
         return res.stdout.strip()
     except subprocess.CalledProcessError as e:
+        logger.warning("git show failed for %s: %s", clean_hash, e.stderr.strip())
         return f"Error showing commit {clean_hash}: {e.stderr.strip()}"
     except Exception as e:
+        logger.warning("git show failed for %s: %s", clean_hash, e)
         return f"Error retrieving commit details: {str(e)}"
 
 
@@ -93,33 +105,28 @@ def find_file_dependents(module_name: str, max_results: int = 20) -> list[str]:
 
     dependents: list[str] = []
 
-    # File extensions to scan
-    code_extensions = {".ts", ".tsx", ".js", ".jsx", ".mjs"}
-    ignore_dirs = {"node_modules", ".next", ".git", "dist", "build"}
-
     # Pattern matches import ... from '...target...' or require('...target...')
     regex_pattern = re.compile(
         rf"""(?:import\s+.*?from\s+['"][^'"]*?{re.escape(target_basename)}[^'"]*?['"]|require\s*\(\s*['"][^'"]*?{re.escape(target_basename)}[^'"]*?['"]\s*\))""",
         re.MULTILINE,
     )
 
-    for p in corpus_dir.rglob("*"):
-        if not p.is_file():
-            continue
-        if any(part in ignore_dirs for part in p.parts):
-            continue
-        if p.suffix.lower() not in code_extensions:
-            continue
-
-        try:
-            content = p.read_text(encoding="utf-8", errors="ignore")
+    # os.walk lets us prune ignored directories in place; rglob would still
+    # descend into node_modules before filtering each path out.
+    for root, dirnames, filenames in os.walk(corpus_dir):
+        dirnames[:] = [d for d in dirnames if d not in SCAN_IGNORE_DIRS]
+        for filename in filenames:
+            if Path(filename).suffix.lower() not in CODE_EXTENSIONS:
+                continue
+            p = Path(root) / filename
+            try:
+                content = p.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
             if regex_pattern.search(content):
-                rel_path = str(p.relative_to(corpus_dir))
-                dependents.append(rel_path)
+                dependents.append(str(p.relative_to(corpus_dir)))
                 if len(dependents) >= max_results:
-                    break
-        except Exception:
-            continue
+                    return dependents
 
     return dependents
 

@@ -140,7 +140,7 @@ export function ChatMessageItem({
 
                   return (
                     <button
-                      key={s.chunk_id || idx}
+                      key={s.citation || `${s.file_path}:${s.start_line}:${idx}`}
                       type="button"
                       onClick={() => onSelectCitation(s)}
                       className="group flex items-center gap-1.5 rounded-lg border border-white/8 bg-zinc-900/90 px-2 py-1 text-[11px] text-zinc-300 hover:border-emerald-500/40 hover:bg-zinc-800 transition"

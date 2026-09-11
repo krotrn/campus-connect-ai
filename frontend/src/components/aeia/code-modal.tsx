@@ -23,9 +23,15 @@ export function CodeModal({ citation, onClose }: CodeModalProps) {
 
   if (!citation) return null;
 
+  // content and score are optional on the wire: agent-generated sources and
+  // degraded responses can omit them, so never dereference them directly.
+  const content = citation.content ?? "";
+  const hasScore = typeof citation.score === "number";
+
   const handleCopy = async () => {
+    if (!content) return;
     try {
-      await navigator.clipboard.writeText(citation.content);
+      await navigator.clipboard.writeText(content);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -39,7 +45,7 @@ export function CodeModal({ citation, onClose }: CodeModalProps) {
       : "";
 
   // Split lines for line numbers
-  const lines = citation.content.split("\n");
+  const lines = content ? content.split("\n") : [];
   const startNum = citation.start_line || 1;
 
   return (
@@ -66,6 +72,11 @@ export function CodeModal({ citation, onClose }: CodeModalProps) {
 
         {/* Code Content with Line Numbers */}
         <div className="flex-1 overflow-y-auto bg-slate-950 p-4 font-mono text-xs">
+          {lines.length === 0 ? (
+            <p className="text-slate-500">
+              No source content was returned for this citation.
+            </p>
+          ) : (
           <div className="flex">
             {/* Line numbers column */}
             <div className="select-none pr-4 text-right text-slate-600">
@@ -82,16 +93,22 @@ export function CodeModal({ citation, onClose }: CodeModalProps) {
               </code>
             </pre>
           </div>
+          )}
         </div>
 
         {/* Footer */}
         <div className="flex items-center justify-between border-t border-border/60 bg-slate-900 px-5 py-2.5 text-xs text-muted-foreground">
-          <span>Relevance Score: {citation.score.toFixed(4)}</span>
+          <span>
+            {hasScore
+              ? `Relevance Score: ${citation.score!.toFixed(4)}`
+              : "Relevance score unavailable"}
+          </span>
           <Button
             size="sm"
             variant="outline"
             onClick={handleCopy}
-            className="flex items-center gap-1.5 h-8 text-xs bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-200"
+            disabled={!content}
+            className="flex items-center gap-1.5 h-8 text-xs bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-200 disabled:opacity-50"
           >
             {copied ? (
               <>

@@ -1,9 +1,14 @@
+import logging
 import re
 
 from google import genai
 from google.genai import types
 
 from src.config import settings
+
+logger = logging.getLogger(__name__)
+
+ROUTES = frozenset({"git_commit", "git_history", "file_dependents", "direct_rag"})
 
 ROUTER_SYSTEM_PROMPT = """You are a specialized query classifier for a code intelligence agent.
 Classify the user query into exactly one of four routes:
@@ -68,17 +73,22 @@ def classify_route_fast(question: str) -> tuple[str, str, str] | None:
     return None
 
 
-def classify_route_llm(question: str) -> tuple[str, str, str]:
+def classify_route_llm(question: str, api_key: str | None = None) -> tuple[str, str, str]:
     """
     Uses Gemini LLM to classify ambiguous queries.
+
+    *api_key* lets a caller-supplied key (client-side injection) drive routing.
+    Without it, routing falls back to the server key, and without either the
+    query is routed to direct RAG.
     """
-    if not settings.gemini_api_key or settings.gemini_api_key == "your_gemini_api_key_here":
+    effective_key = (api_key or "").strip() or (settings.gemini_api_key if settings.has_gemini_key else "")
+    if not effective_key or effective_key == "your_gemini_api_key_here":
         return ("direct_rag", "Defaulted to direct RAG (no Gemini API key configured).", "")
 
     try:
-        client = genai.Client(api_key=settings.gemini_api_key)
+        client = genai.Client(api_key=effective_key)
         response = client.models.generate_content(
-            model="gemini-3.6-flash",
+            model=settings.gemini_model,
             contents=f"User Query: {question}",
             config=types.GenerateContentConfig(
                 system_instruction=ROUTER_SYSTEM_PROMPT,
@@ -96,7 +106,7 @@ def classify_route_llm(question: str) -> tuple[str, str, str]:
             line = line.strip()
             if line.startswith("ROUTE:"):
                 cand = line.split(":", 1)[1].strip().lower()
-                if cand in {"git_commit", "git_history", "file_dependents", "direct_rag"}:
+                if cand in ROUTES:
                     route = cand
             elif line.startswith("REASON:"):
                 reason = line.split(":", 1)[1].strip()
@@ -107,10 +117,11 @@ def classify_route_llm(question: str) -> tuple[str, str, str]:
 
         return (route, reason, target)
     except Exception as e:
+        logger.warning("LLM routing failed, defaulting to direct_rag: %s", e)
         return ("direct_rag", f"Routing fallback to direct_rag due to error: {str(e)}", "")
 
 
-def route_query(question: str) -> tuple[str, str, str]:
+def route_query(question: str, api_key: str | None = None) -> tuple[str, str, str]:
     """
     Main entry point for routing. Tries fast classification first, then falls back to LLM.
     Returns: (route, reasoning, target)
@@ -119,5 +130,5 @@ def route_query(question: str) -> tuple[str, str, str]:
     if fast_result is not None:
         return fast_result
 
-    return classify_route_llm(question)
+    return classify_route_llm(question, api_key=api_key)
 

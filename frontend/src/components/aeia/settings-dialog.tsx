@@ -5,11 +5,11 @@ import { Check, Loader2, Server, KeyRound, AlertCircle, X, Sparkles } from "luci
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  getStoredApiKey,
-  getStoredBackendUrl,
+  getCustomApiKey,
+  getCustomBackendUrl,
   getStoredGeminiApiKey,
-  setStoredApiKey,
-  setStoredBackendUrl,
+  setCustomApiKey,
+  setCustomBackendUrl,
   setStoredGeminiApiKey,
 } from "@/lib/settings";
 import { aeiaService } from "@/services/aeia.service";
@@ -25,31 +25,34 @@ export function SettingsDialog({
   onOpenChange,
   onSettingsSaved,
 }: SettingsDialogProps) {
-  const [url, setUrl] = React.useState("");
-  const [key, setKey] = React.useState("");
-  const [geminiKey, setGeminiKey] = React.useState("");
+  // The form is a separate component mounted only while the dialog is open, so
+  // its state initializes from storage on mount instead of being reset by an
+  // effect on every `open` change.
+  if (!open) return null;
+
+  return (
+    <SettingsDialogForm onOpenChange={onOpenChange} onSettingsSaved={onSettingsSaved} />
+  );
+}
+
+function SettingsDialogForm({
+  onOpenChange,
+  onSettingsSaved,
+}: Omit<SettingsDialogProps, "open">) {
+  const [url, setUrl] = React.useState(() => getCustomBackendUrl());
+  const [key, setKey] = React.useState(() => getCustomApiKey());
+  const [geminiKey, setGeminiKey] = React.useState(() => getStoredGeminiApiKey());
   const [testing, setTesting] = React.useState(false);
   const [testResult, setTestResult] = React.useState<{
     success: boolean;
     message: string;
   } | null>(null);
 
-  React.useEffect(() => {
-    if (open) {
-      setUrl(getStoredBackendUrl());
-      setKey(getStoredApiKey());
-      setGeminiKey(getStoredGeminiApiKey());
-      setTestResult(null);
-    }
-  }, [open]);
-
-  if (!open) return null;
-
   const handleTestConnection = async () => {
     setTesting(true);
     setTestResult(null);
     try {
-      const res = await aeiaService.checkHealth(url);
+      const res = await aeiaService.checkHealth(url, key);
       setTestResult({
         success: true,
         message: `Connected! Qdrant status: ${res.status} (${res.points_indexed ?? res.indexed_points ?? 0} points indexed)`,
@@ -65,8 +68,8 @@ export function SettingsDialog({
   };
 
   const handleSave = () => {
-    setStoredBackendUrl(url);
-    setStoredApiKey(key);
+    setCustomBackendUrl(url);
+    setCustomApiKey(key);
     setStoredGeminiApiKey(geminiKey);
     onSettingsSaved?.();
     onOpenChange(false);
@@ -98,30 +101,35 @@ export function SettingsDialog({
             </label>
             <Input
               type="text"
-              placeholder="e.g. https://aeia-api.up.railway.app or http://localhost:8000"
+              placeholder="Leave empty to use this app's configured backend"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               className="bg-slate-950 border-border text-xs"
             />
             <p className="mt-1 text-[11px] text-muted-foreground">
-              Your deployed AEIA FastAPI backend URL (on Railway, Render, Fly, or local).
+              Optional. Leave empty and requests go through this app&apos;s server, which
+              holds the backend key. Set a URL to call your own AEIA deployment
+              directly from the browser — you must then supply its key below.
             </p>
           </div>
 
           <div>
             <label className="block font-medium text-slate-300 mb-1.5 flex items-center gap-1.5">
               <KeyRound className="size-3.5 text-muted-foreground" />
-              <span>AEIA API Key (`X-API-Key`)</span>
+              <span>AEIA API Key (for a custom backend)</span>
             </label>
             <Input
               type="password"
-              placeholder="e.g. dev-key-change-me"
+              placeholder="Only needed with a custom backend URL"
               value={key}
               onChange={(e) => setKey(e.target.value)}
-              className="bg-slate-950 border-border text-xs"
+              disabled={!url.trim()}
+              className="bg-slate-950 border-border text-xs disabled:opacity-50"
             />
             <p className="mt-1 text-[11px] text-muted-foreground">
-              Must match the `API_KEY` configured on your backend server.
+              Only used with a custom backend URL, and sent only to that host. The
+              default backend&apos;s key stays on this app&apos;s server and never
+              reaches your browser.
             </p>
           </div>
 
@@ -175,7 +183,7 @@ export function SettingsDialog({
           <Button
             size="sm"
             variant="outline"
-            disabled={testing || !url}
+            disabled={testing}
             onClick={handleTestConnection}
             className="h-8 text-xs flex items-center gap-1.5 border-border hover:bg-slate-800"
           >

@@ -1,3 +1,5 @@
+import heapq
+import logging
 import re
 import sys
 import threading
@@ -10,6 +12,8 @@ from rank_bm25 import BM25Okapi
 
 from src.config import settings
 from src.errors import VectorDBUnavailableError
+
+logger = logging.getLogger(__name__)
 
 RRF_K = 60  # standard constant for Reciprocal Rank Fusion
 DENSE_WEIGHT = 0.7
@@ -36,6 +40,9 @@ class Retriever:
             url=settings.qdrant_url,
             api_key=settings.qdrant_api_key if settings.qdrant_api_key else None,
             check_compatibility=False,
+            # Without an explicit timeout the client blocks indefinitely when
+            # Qdrant is unreachable, so VectorDBUnavailableError never fires.
+            timeout=settings.qdrant_timeout,
         )
         self.embedding_model = TextEmbedding(model_name=settings.embedding_model)
         self.rerank = rerank
@@ -46,9 +53,9 @@ class Retriever:
 
         # ── Load cross-encoder reranker ───────────────────────────────────────
         if self.rerank:
-            print("⚡ Loading FlashRank cross-encoder...")
+            logger.info("Loading FlashRank cross-encoder...")
             self._ranker = Ranker(model_name="ms-marco-MiniLM-L-12-v2", cache_dir="/tmp/flashrank")
-            print("   Reranker ready.")
+            logger.info("Reranker ready.")
 
     # ─────────────────────────────────────────────────────────────────────────
     # Public API
@@ -104,7 +111,7 @@ class Retriever:
         swap is protected, so concurrent ``retrieve()`` calls always see a
         consistent (old *or* new) index — never a half-built one.
         """
-        print("📚 Building/Reloading BM25 index from Qdrant collection...")
+        logger.info("Building/reloading BM25 index from Qdrant collection...")
         new_chunks: list[dict] = self._scroll_all_payloads()
         if new_chunks:
             tokenized = [self._tokenize(f"{c.get('file_path', '')} {c.get('content', '')}") for c in new_chunks]
@@ -116,7 +123,7 @@ class Retriever:
             self._all_chunks = new_chunks
             self._bm25 = new_bm25
 
-        print(f"   BM25 index built over {len(new_chunks)} chunks.")
+        logger.info("BM25 index built over %d chunks.", len(new_chunks))
 
     # ─────────────────────────────────────────────────────────────────────────
     # Dense retrieval
@@ -165,8 +172,8 @@ class Retriever:
 
         scores = bm25.get_scores(tokens)
 
-        # Get top_k indices sorted by descending score
-        top_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:top_k]
+        # Select the top_k indices without fully sorting every score.
+        top_indices = heapq.nlargest(top_k, range(len(scores)), key=scores.__getitem__)
 
         chunks = []
         for idx in top_indices:

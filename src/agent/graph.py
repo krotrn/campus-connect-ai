@@ -22,9 +22,21 @@ def create_agent_graph(retriever: Retriever, generator: AnswerGenerator):
     # 1. Router Node
     # ─────────────────────────────────────────────────────────────────────────
     def router_node(state: AgentState) -> dict:
+        # The API layer may have already routed this query (it needs the route
+        # to decide between the streaming RAG path and the agent path). Reuse
+        # that decision rather than paying for a second LLM classification.
+        preresolved = state.get("route")
+        if preresolved:
+            steps = state.get("steps_taken", []) + [f"reused_route_{preresolved}"]
+            return {
+                "route": preresolved,
+                "route_reasoning": state.get("route_reasoning", ""),
+                "target": state.get("target"),
+                "steps_taken": steps,
+            }
 
         question = state["question"]
-        route, reasoning, target = route_query(question)
+        route, reasoning, target = route_query(question, api_key=state.get("gemini_api_key"))
         steps = state.get("steps_taken", []) + [f"routed_to_{route}"]
         return {
             "route": route,
@@ -123,11 +135,18 @@ def create_agent_graph(retriever: Retriever, generator: AnswerGenerator):
         context_chunks_data = state.get("context_chunks", [])
 
         if tool_output:
-            # Tool output synthesized directly with grounded formatting
+            # Pass the raw tool output through the model so the engineer gets an
+            # answer rather than a diffstat they have to read themselves. The
+            # generator falls back to the raw block if no model is available.
+            synthesized = generator.generate_from_tool_output(
+                question,
+                tool_output,
+                route=state.get("route", ""),
+                api_key=state.get("gemini_api_key"),
+            )
             answer = (
-                f"### Result from Codebase Tool Analysis\n\n"
                 f"**Route Selected**: `{state.get('route')}` ({state.get('route_reasoning')})\n\n"
-                f"```text\n{tool_output}\n```"
+                f"{synthesized}"
             )
             source_file = (
                 "git-repository-history" if "git" in state.get("route", "") else "module-dependency-graph"

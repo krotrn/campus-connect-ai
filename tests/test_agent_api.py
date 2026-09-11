@@ -18,7 +18,7 @@ def auth_headers():
 
 def test_agent_ask_requires_auth(client):
     response = client.post("/agent/ask", json={"question": "What changed in commit 6e19f61?"})
-    assert response.status_code == 422  # Missing X-API-Key
+    assert response.status_code == 401  # Missing X-API-Key
 
 
 def test_agent_ask_rejects_wrong_key(client):

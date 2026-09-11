@@ -18,6 +18,17 @@ import { SettingsDialog } from "@/components/aeia/settings-dialog";
 import { QuotaAlert } from "@/components/aeia/quota-alert";
 import { ErrorBanner } from "@/components/aeia/error-banner";
 
+const ROUTE_LABELS: Record<string, string> = {
+  git_commit: "Autonomous Agent → Git Commit Audit",
+  git_history: "Autonomous Agent → Git History",
+  file_dependents: "Autonomous Agent → Dependency Mapping",
+  direct_rag: "Autonomous Engine → Hybrid RAG",
+};
+
+function routeLabel(route: string): string {
+  return ROUTE_LABELS[route] ?? ROUTE_LABELS.direct_rag;
+}
+
 export default function HomePage() {
   const [sidebarOpen, setSidebarOpen] = React.useState(true);
   const [messages, setMessages] = React.useState<ChatMessage[]>([]);
@@ -123,20 +134,13 @@ export default function HomePage() {
             if (incomingSessionId) setSessionId(incomingSessionId);
             if (route) resolvedRoute = route;
 
-            const routeLabel =
-              resolvedRoute === "git_commit"
-                ? "Autonomous Agent → Git Commit Audit"
-                : resolvedRoute === "git_history"
-                ? "Autonomous Agent → Git History"
-                : resolvedRoute === "file_dependents"
-                ? "Autonomous Agent → Dependency Mapping"
-                : "Autonomous Engine → Hybrid RAG";
-
             const telemetryData: TelemetryData = {
-              route: routeLabel,
+              route: routeLabel(resolvedRoute),
               latency: "streaming...",
               chunks: incomingSources.length,
-              model: "gemini-3.6-flash",
+              // The backend reports the model it actually used (after any
+              // fallback) in the `done` event; unknown until then.
+              model: null,
             };
 
             setMessages((prev) =>
@@ -161,23 +165,15 @@ export default function HomePage() {
               )
             );
           },
-          onDone: (latencyMs, route) => {
+          onDone: (latencyMs, route, model) => {
             const totalSec = (latencyMs / 1000).toFixed(2);
             const finalRoute = route || resolvedRoute;
-            const routeLabel =
-              finalRoute === "git_commit"
-                ? "Autonomous Agent → Git Commit Audit"
-                : finalRoute === "git_history"
-                ? "Autonomous Agent → Git History"
-                : finalRoute === "file_dependents"
-                ? "Autonomous Agent → Dependency Mapping"
-                : "Autonomous Engine → Hybrid RAG";
 
             const finalTelemetry: TelemetryData = {
-              route: routeLabel,
+              route: routeLabel(finalRoute),
               latency: `${totalSec}s`,
               chunks: currentSources.length,
-              model: "gemini-3.6-flash",
+              model: model ?? null,
             };
 
             setMessages((prev) =>
@@ -319,7 +315,6 @@ export default function HomePage() {
                         .find((m) => m.role === "user");
                       if (lastUser) handleSubmit(lastUser.content);
                     }}
-                    onOpenSettings={() => setSettingsOpen(true)}
                   />
                 )}
 

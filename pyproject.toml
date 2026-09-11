@@ -37,6 +37,11 @@ dev = [
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "integration: requires a live Qdrant and Gemini API key",
+    "real_router: exercise the real LLM router instead of the test stub",
+]
 
 [tool.ruff]
 target-version = "py312"

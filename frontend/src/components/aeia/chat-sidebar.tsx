@@ -17,8 +17,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { HealthResponse } from "@/types/aeia";
-import { aeiaService } from "@/services/aeia.service";
+import { useAeiaHealthStatus } from "@/hooks/queries/use-aeia-health";
 
 interface ChatSidebarProps {
   open: boolean;
@@ -68,26 +67,8 @@ export function ChatSidebar({
   onOpenSettings,
   hasMessages,
 }: ChatSidebarProps) {
-  const [healthStatus, setHealthStatus] = React.useState<{
-    state: "loading" | "healthy" | "offline";
-    points?: number;
-  }>({ state: "loading" });
-
-  const checkHealth = React.useCallback(async () => {
-    try {
-      const res: HealthResponse = await aeiaService.checkHealth();
-      const points = res.points_indexed ?? res.indexed_points ?? 0;
-      setHealthStatus({ state: "healthy", points });
-    } catch {
-      setHealthStatus({ state: "offline" });
-    }
-  }, []);
-
-  React.useEffect(() => {
-    checkHealth();
-    const timer = setInterval(checkHealth, 30000);
-    return () => clearInterval(timer);
-  }, [checkHealth]);
+  // Polling, retries, and cleanup are handled by React Query.
+  const { status: healthStatus, refetch: checkHealth } = useAeiaHealthStatus();
 
   if (!open) {
     return null;
@@ -176,12 +157,13 @@ export function ChatSidebar({
       {/* Sidebar Footer: Health & Settings */}
       <div className="p-3 border-t border-white/8 bg-[#070709] space-y-2">
         {/* Backend Status Pill */}
-        <div
+        <button
+          type="button"
           onClick={checkHealth}
           title="Click to re-check backend health"
-          className="cursor-pointer flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-zinc-900/60 border border-white/8 hover:bg-zinc-900 transition text-xs font-mono"
+          className="w-full cursor-pointer flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-zinc-900/60 border border-white/8 hover:bg-zinc-900 transition text-xs font-mono"
         >
-          <div className="flex items-center gap-2 overflow-hidden">
+          <span className="flex items-center gap-2 overflow-hidden">
             {healthStatus.state === "healthy" ? (
               <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />
             ) : healthStatus.state === "loading" ? (
@@ -196,7 +178,7 @@ export function ChatSidebar({
                 ? "Connecting..."
                 : "Backend Offline"}
             </span>
-          </div>
+          </span>
           <span
             className={`size-2 rounded-full shrink-0 ${
               healthStatus.state === "healthy"
@@ -206,7 +188,7 @@ export function ChatSidebar({
                 : "bg-rose-500"
             }`}
           />
-        </div>
+        </button>
 
         {/* Settings Trigger */}
         <button

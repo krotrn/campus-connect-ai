@@ -35,3 +35,4 @@ This directory documents the key architectural and technical decisions made for 
 | [0029](0029-client-side-api-key-injection-and-quota-resilience.md) | Client-Side Dynamic API Key Injection & LLM Quota Resilience | Accepted | 2026-09-07 |
 | [0030](0030-unified-sse-streaming-protocol-for-rag-and-agent.md) | Unified Server-Sent Events (SSE) Streaming Protocol for RAG & Agentic Routing | Accepted | 2026-09-07 |
 | [0031](0031-codebase-type-modernization-and-ingestion-telemetry.md) | Modernized Python 3.12+ Type Annotation Standard & Ingestion Progress Instrumentation | Accepted | 2026-09-07 |
+| [0032](0032-production-hardening-credential-boundary-and-async-correctness.md) | Production Hardening: Credential Boundary, Async Correctness & Offline Test Strategy | Accepted | 2026-09-11 |

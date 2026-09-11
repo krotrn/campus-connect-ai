@@ -1,4 +1,4 @@
-import { getStoredApiKey, getStoredBackendUrl, getStoredGeminiApiKey } from "@/lib/settings";
+import { getStoredGeminiApiKey, resolveEndpoint } from "@/lib/settings";
 import {
   AgentAskResponse,
   HealthResponse,
@@ -15,33 +15,59 @@ export interface StreamCallbacks {
     routeReasoning?: string
   ) => void;
   onToken?: (token: string) => void;
-  onDone?: (latencyMs: number, route?: string) => void;
+  onDone?: (latencyMs: number, route?: string, model?: string | null) => void;
   onError?: (error: string) => void;
+}
+
+/** Pull a human-readable message out of an error response body. */
+async function errorMessage(response: Response, fallback: string): Promise<string> {
+  const data = await response.json().catch(() => null);
+  if (!data) return fallback;
+
+  if (typeof data.detail === "string") return data.detail;
+  if (Array.isArray(data.detail)) {
+    return data.detail
+      .map((d: { msg?: string }) => d.msg || JSON.stringify(d))
+      .join(", ");
+  }
+  if (typeof data.message === "string") return data.message;
+  return fallback;
 }
 
 export const aeiaService = {
   /**
-   * Ping backend health endpoint.
+   * Ping the backend health endpoint.
+   *
+   * `overrideUrl` is used by the settings dialog to test a custom backend
+   * before saving it; it bypasses the proxy and calls that host directly.
    */
-  async checkHealth(overrideUrl?: string): Promise<HealthResponse> {
-    const baseUrl = (overrideUrl || getStoredBackendUrl()).replace(/\/+$/, "");
-    const res = await fetch(`${baseUrl}/health`, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-      },
-    });
+  async checkHealth(overrideUrl?: string, overrideKey?: string): Promise<HealthResponse> {
+    let url: string;
+    let headers: Record<string, string>;
+
+    if (overrideUrl?.trim()) {
+      url = `${overrideUrl.trim().replace(/\/+$/, "")}/health`;
+      headers = { Accept: "application/json" };
+      if (overrideKey?.trim()) {
+        headers["X-API-Key"] = overrideKey.trim();
+      }
+    } else {
+      const resolved = resolveEndpoint("health");
+      url = resolved.url;
+      headers = { ...resolved.headers, Accept: "application/json" };
+    }
+
+    const res = await fetch(url, { method: "GET", headers });
 
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || `Server responded with HTTP ${res.status}`);
+      throw new Error(await errorMessage(res, `Server responded with HTTP ${res.status}`));
     }
 
     return res.json();
   },
 
   /**
-   * Stream response from /ask/stream via Server-Sent Events (SSE).
+   * Stream a response from /ask/stream via Server-Sent Events (SSE).
    */
   async askStream(
     question: string,
@@ -49,19 +75,10 @@ export const aeiaService = {
     callbacks: StreamCallbacks,
     signal?: AbortSignal
   ): Promise<void> {
-    const baseUrl = getStoredBackendUrl();
-    const apiKey = getStoredApiKey();
+    const { url, headers } = resolveEndpoint("askStream");
     const geminiApiKey = getStoredGeminiApiKey();
 
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      "X-API-Key": apiKey,
-    };
-    if (geminiApiKey) {
-      headers["X-Gemini-API-Key"] = geminiApiKey;
-    }
-
-    const response = await fetch(`${baseUrl}/ask/stream`, {
+    const response = await fetch(url, {
       method: "POST",
       headers,
       body: JSON.stringify({
@@ -74,16 +91,7 @@ export const aeiaService = {
     });
 
     if (!response.ok) {
-      const errData = await response.json().catch(() => ({}));
-      let msg = `Server error (${response.status})`;
-      if (typeof errData.detail === "string") {
-        msg = errData.detail;
-      } else if (Array.isArray(errData.detail)) {
-        msg = errData.detail.map((d: { msg?: string }) => d.msg || JSON.stringify(d)).join(", ");
-      } else if (errData.message) {
-        msg = errData.message;
-      }
-      throw new Error(msg);
+      throw new Error(await errorMessage(response, `Server error (${response.status})`));
     }
 
     if (!response.body) {
@@ -124,7 +132,7 @@ export const aeiaService = {
             } else if (payload.type === "token") {
               callbacks.onToken?.(payload.text);
             } else if (payload.type === "done") {
-              callbacks.onDone?.(payload.latency_ms, payload.route);
+              callbacks.onDone?.(payload.latency_ms, payload.route, payload.model);
             } else if (payload.type === "error") {
               callbacks.onError?.(payload.error || "Streaming error occurred");
             }
@@ -139,26 +147,17 @@ export const aeiaService = {
   },
 
   /**
-   * Run agent graph endpoint /agent/ask.
+   * Run the agent graph endpoint (/agent/ask) and wait for the full result.
    */
   async askAgent(
     question: string,
     sessionId: string | null,
     signal?: AbortSignal
   ): Promise<AgentAskResponse> {
-    const baseUrl = getStoredBackendUrl();
-    const apiKey = getStoredApiKey();
+    const { url, headers } = resolveEndpoint("agent");
     const geminiApiKey = getStoredGeminiApiKey();
 
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      "X-API-Key": apiKey,
-    };
-    if (geminiApiKey) {
-      headers["X-Gemini-API-Key"] = geminiApiKey;
-    }
-
-    const response = await fetch(`${baseUrl}/agent/ask`, {
+    const response = await fetch(url, {
       method: "POST",
       headers,
       body: JSON.stringify({
@@ -170,17 +169,9 @@ export const aeiaService = {
     });
 
     if (!response.ok) {
-      const errData = await response.json().catch(() => ({}));
-      let msg = `Agent request failed (${response.status})`;
-      if (typeof errData.detail === "string") {
-        msg = errData.detail;
-      } else if (errData.message) {
-        msg = errData.message;
-      }
-      throw new Error(msg);
+      throw new Error(await errorMessage(response, `Agent request failed (${response.status})`));
     }
 
     return response.json();
   },
 };
-

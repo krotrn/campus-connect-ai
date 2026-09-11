@@ -6,6 +6,7 @@ Enables engineers to ask contextual follow-up questions (e.g. "Can you show me i
 into self-contained search queries before retrieval.
 """
 
+import logging
 import threading
 import time
 import uuid
@@ -15,6 +16,8 @@ from google import genai
 from google.genai import types
 
 from src.config import settings
+
+logger = logging.getLogger(__name__)
 
 REWRITE_SYSTEM_PROMPT = """You are an expert search query reformulation engine for a codebase intelligence tool.
 
@@ -120,7 +123,7 @@ def rewrite_query_with_history(
     query: str,
     history: list[ChatMessage],
     client: genai.Client | None = None,
-    model_name: str = "gemini-3.6-flash",
+    model_name: str | None = None,
 ) -> str:
     """Rewrite follow-up queries using conversation history to resolve coreferences.
 
@@ -138,6 +141,8 @@ def rewrite_query_with_history(
         return query
 
     if client is None:
+        if not settings.has_gemini_key:
+            return query
         client = genai.Client(api_key=settings.gemini_api_key)
 
     # Format history turns
@@ -158,7 +163,7 @@ def rewrite_query_with_history(
 
 Rewritten Self-Contained Query:"""
 
-    candidates = [model_name, "gemini-2.5-flash", "gemini-2.5-flash-lite"]
+    candidates = [model_name or settings.gemini_model, *settings.gemini_fallback_models]
     for model in candidates:
         try:
             resp = client.models.generate_content(
@@ -173,7 +178,8 @@ Rewritten Self-Contained Query:"""
             rewritten = (resp.text or "").strip()
             if rewritten and len(rewritten) >= 3:
                 return rewritten
-        except Exception:
+        except Exception as e:
+            logger.warning("Query rewrite via %s failed: %s", model, e)
             continue
 
     # Fallback to original query on upstream failure

@@ -9,7 +9,7 @@
 
 - **Hybrid Retrieval (V2)**: Combines dense semantic search (BGE-small) with sparse lexical BM25 fused via Weighted Reciprocal Rank Fusion (RRF 70/30).
 - **Semantic Prefix Enrichment**: Prepend natural-language contextual headers to raw Docker Compose, SQL migrations, and dotenv files to ensure discoverability.
-- **Production Hardening (V3)**: API Key authentication (`X-API-Key`), client rate limiting (`slowapi`), background async ingestion queue, and GitHub Actions CI.
+- **Production Hardening (V3)**: API Key authentication (`X-API-Key`, constant-time comparison), client rate limiting (`slowapi`), background async ingestion queue, and GitHub Actions CI (`.github/workflows/ci.yml`).
 - **Observability (V4)**: Full-lifecycle request tracing with Langfuse across retrieval and LLM generation spans.
 - **Agentic Layer (V5)**: Explicit **LangGraph** state machine that routes queries between direct hybrid RAG and non-RAG tools (git commit history, commit diff inspection, reverse module dependency tracking).
 - **Model Context Protocol (V6)**: Exposes codebase intelligence as an official **MCP Server** (2026-07-28 stateless HTTP spec) with granular tools (`search_campus_connect`, `explain_codebase_query`, `get_commit_history`, etc.).
@@ -20,6 +20,7 @@
   - **GitHub Webhook (`POST /webhook/github`)**: Cryptographically verified HMAC-SHA256 push listener triggers instant background sync.
   - **Thread-Safe BM25 Hot-Reload**: Build-then-swap pattern ensures concurrent query threads never see incomplete index states during background ingestion.
 - **Decoupled Next.js Web Console**: Modern, responsive Next.js 16 / React 19 / Tailwind CSS v4 console (`frontend/`) with real-time SSE streaming, interactive code inspector drawer, client-side Gemini API key injection, quota recovery alerts, and route telemetry.
+  - **Server-side credential handling**: the browser never receives the backend API key. Requests go to Next route handlers under `src/app/api/aeia/*`, which attach `X-API-Key` from server-only environment variables and proxy to FastAPI.
 - **Multi-Format Syntax-Aware Chunking**:
   - **TypeScript/TSX**: Tree-Sitter AST parsing extracting functions, classes, interfaces, and types with JSDoc preservation.
   - **Prisma**: Structural block parsing of complete `model` and `enum` declarations with relational integrity.
@@ -36,13 +37,18 @@
 # 1. Bring up Qdrant vector database
 docker compose up -d qdrant
 
-# 2. Ingest the corpus (initial run builds content-hash cache; re-runs take ~30s)
+# 2. Ingest the corpus (initial run builds the SQLite embedding cache; re-runs take ~30s)
+#    Re-ingestion is non-destructive: chunks are upserted and stale points pruned
+#    afterwards, so /ask keeps serving throughout. Add --recreate only for schema
+#    changes (e.g. a new embedding dimension), which does cause downtime.
 PYTHONPATH=. uv run python -m src.ingestion.pipeline
 
 # 3. Start the FastAPI backend server (port 8000)
 PYTHONPATH=. uv run uvicorn src.api.main:app --reload
 
 # 4. Start the Next.js Web Console (port 3000)
+#    Copy frontend/.env.example to frontend/.env.local first: AEIA_API_URL and
+#    AEIA_API_KEY are server-only and must NOT be given a NEXT_PUBLIC_ prefix.
 cd frontend && pnpm install && pnpm dev
 
 # 5. Ask a standard code question (Pure RAG via curl)
@@ -168,13 +174,27 @@ tests/                16 automated test suites (including test_unified_stream.py
 
 ## Running Tests
 
+The backend suite runs **fully offline by default** against in-memory fakes
+(`tests/conftest.py`): no Qdrant, no Gemini API key, no quota spent. This is what
+CI runs, and it completes in about 30 seconds.
+
 ```bash
-# Run backend pytest suite
+# Backend — offline, no infrastructure required
 uv run pytest -v
 
-# Run frontend Vitest suite
-cd frontend && pnpm test
+# Backend — against the real stack (needs a populated Qdrant and GEMINI_API_KEY)
+AEIA_TEST_MODE=integration uv run pytest -v
+
+# Lint
+uv run ruff check .
+
+# Frontend
+cd frontend && pnpm lint && pnpm typecheck && pnpm test
 ```
+
+`tests/test_regressions.py` pins previously-fixed defects (double-counted rate
+limits, double LLM routing, leaked error details, the ingestion race). Add a case
+there whenever you fix a bug that shipped.
 
 ---
 
@@ -213,6 +233,7 @@ Key architectural decisions are documented in [`docs/decisions/`](docs/decisions
 - [0029 — Client-Side Dynamic API Key Injection & LLM Quota Resilience](docs/decisions/0029-client-side-api-key-injection-and-quota-resilience.md)
 - [0030 — Unified Server-Sent Events (SSE) Streaming Protocol for RAG & Agentic Routing](docs/decisions/0030-unified-sse-streaming-protocol-for-rag-and-agent.md)
 - [0031 — Modernized Python 3.12+ Type Annotation Standard & Ingestion Progress Instrumentation](docs/decisions/0031-codebase-type-modernization-and-ingestion-telemetry.md)
+- [0032 — Production Hardening: Credential Boundary, Async Correctness & Offline Tests](docs/decisions/0032-production-hardening-credential-boundary-and-async-correctness.md)
 
 ---
 

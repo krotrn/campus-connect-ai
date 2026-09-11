@@ -26,16 +26,25 @@ services:
       - QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}
       - QDRANT_API_KEY=${QDRANT_API_KEY:-}
       - COLLECTION_NAME=${COLLECTION_NAME:-campus_connect}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - API_KEY=${API_KEY:-dev-key-change-me}
       - RATE_LIMIT=${RATE_LIMIT:-20/minute}
+      # The corpus is mounted below; the agent's git tools read it from here.
+      - CORPUS_PATH=${CORPUS_PATH:-/app/corpus/campus-connect}
+      - CORS_ALLOW_ORIGINS=${CORS_ALLOW_ORIGINS:-["http://localhost:3000"]}
+      - MCP_ALLOWED_HOSTS=${MCP_ALLOWED_HOSTS:-["localhost","127.0.0.1","api"]}
+      - GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET:-}
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
+      - LANGFUSE_HOST=${LANGFUSE_HOST:-https://cloud.langfuse.com}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      # The target codebase the assistant answers questions about. Read-write
+      # because the webhook runs `git pull` against it.
+      - ./corpus:/app/corpus
+      # Persist the embedding cache so restarts do not re-embed the corpus.
+      - ./.cache:/app/.cache
     depends_on:
       qdrant:
         condition: service_healthy
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 30s

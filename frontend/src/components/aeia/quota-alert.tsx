@@ -8,17 +8,15 @@ import { getStoredGeminiApiKey, setStoredGeminiApiKey } from "@/lib/settings";
 
 interface QuotaAlertProps {
   onRetry: () => void;
-  onOpenSettings?: () => void;
 }
 
-export function QuotaAlert({ onRetry, onOpenSettings }: QuotaAlertProps) {
-  const [apiKey, setApiKey] = React.useState("");
+export function QuotaAlert({ onRetry }: QuotaAlertProps) {
+  // Lazy initializer rather than an effect: this component only ever mounts
+  // client-side (after a 429 response), so localStorage is available and there
+  // is no server render to mismatch against.
+  const [apiKey, setApiKey] = React.useState(() => getStoredGeminiApiKey());
   const [showPassword, setShowPassword] = React.useState(false);
   const [saved, setSaved] = React.useState(false);
-
-  React.useEffect(() => {
-    setApiKey(getStoredGeminiApiKey());
-  }, []);
 
   const handleSaveAndRetry = (e?: React.SubmitEvent) => {
     if (e) e.preventDefault();
