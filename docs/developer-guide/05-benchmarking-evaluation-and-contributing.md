@@ -256,13 +256,26 @@ uv run python evals/run_eval.py --generation
 > **Zero Retrieval Regression Policy**: A pull request will not be approved if `Recall@5` drops below 85.0%, `Recall@10` drops below 95.0%, or average search latency exceeds 50ms.
 
 ### Step 3: Run the Full Test Suite
-Ensure all 15 automated test suites (76 passing tests) pass without errors:
+Ensure all 17 automated test modules (100 passing tests) pass without errors:
 ```bash
-uv run pytest -v
+uv run pytest -v          # offline, ~26s, no Qdrant and no API key required
+uv run ruff check .       # lint must be clean
+```
+The suite runs against in-memory fakes from [`tests/conftest.py`](../../tests/conftest.py) by default. Before merging anything that touches retrieval, ingestion, or the Gemini client, also run it against the real stack:
+```bash
+AEIA_TEST_MODE=integration uv run pytest -v
+```
+If your change touches the frontend:
+```bash
+cd frontend && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 ```
 
+**Fixed a bug? Pin it.** Add a test to [`tests/test_regressions.py`](../../tests/test_regressions.py) that fails against the old behaviour, so the defect cannot return silently. This is a review expectation, not a suggestion.
+
 ### Step 4: Coding Standards Checklist
-- [ ] **Type Annotations**: All new functions must have complete type signatures (`typing.List`, `typing.Optional`, `typing.Tuple`).
+- [ ] **Type Annotations**: All new functions must have complete type signatures using PEP 585/604 builtins — `list[str]`, `dict[str, int]`, `str | None`. Do **not** use `typing.List`, `typing.Optional`, or `typing.Tuple`; the codebase was standardized away from them in [ADR 0031](../decisions/0031-codebase-type-modernization-and-ingestion-telemetry.md).
+- [ ] **Async Correctness**: A handler declared `async def` must not perform blocking work. Embedding, Qdrant, and Gemini calls are synchronous — declare those handlers plain `def` so FastAPI runs them in its threadpool, or the event loop stalls for every concurrent request ([ADR 0032](../decisions/0032-production-hardening-credential-boundary-and-async-correctness.md)).
+- [ ] **Credential Boundary**: Never introduce a `NEXT_PUBLIC_`-prefixed variable holding a secret — that prefix inlines the value into the client bundle. Backend credentials belong in the server-only route handlers under `frontend/src/app/api/aeia/*`.
 - [ ] **Subprocess Security**: Any `subprocess.run` calls must pass argument lists (never `shell=True`) and validate user inputs with regex.
 - [ ] **Pydantic vs Dataclasses**: Use `@dataclass` for internal hot loops; use Pydantic `BaseModel` for HTTP API schemas.
 - [ ] **Lifespan Integration**: Heavy services or clients must be registered in the FastAPI `lifespan` handler in [`src/api/main.py`](../../src/api/main.py), never instantiated on every request.
@@ -271,7 +284,7 @@ uv run pytest -v
 ### Step 5: Opening the Pull Request
 In your PR description:
 1. Summarize the motivation and changes made.
-2. Paste the terminal output of `uv run pytest -v`.
+2. Paste the terminal output of `uv run pytest -v` and `uv run ruff check .`.
 3. If retrieval was touched, paste the terminal output of `evals/run_eval.py` showing baseline vs. updated metrics.
 4. If an architectural decision was altered, include an updated or new Architectural Decision Record in `docs/decisions/`.
 
@@ -282,8 +295,7 @@ In your PR description:
 Congratulations! You have completed the entire AEIA Developer Mastery Curriculum:
 - You understand the **20 core technologies** in [01 — Technology Stack and Prerequisites](01-technology-stack-and-prerequisites.md).
 - You understand the **system architecture and design patterns** across all 15 versions in [02 — Architecture, Design & Patterns](02-architecture-design-and-patterns.md).
-- You know the purpose and critical lines of **all 82 files and 25 ADRs** in [03 — File-by-File Mastery Catalog](03-file-by-file-mastery-catalog.md).
-- You know the purpose and critical lines of **all 83 files and 26 ADRs** in [03 — File-by-File Mastery Catalog](03-file-by-file-mastery-catalog.md).
+- You know the purpose and critical lines of **every tracked file and all 32 ADRs** in [03 — File-by-File Mastery Catalog](03-file-by-file-mastery-catalog.md).
 - You know how to build the complete system **from scratch in 18 days** in [04 — Step-by-Step Build Curriculum](04-step-by-step-build-curriculum.md).
 - You know how to **measure retrieval metrics, evaluate the RAG Triad, and contribute changes** in this guide.
 

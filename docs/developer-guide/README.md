@@ -23,6 +23,7 @@ Unlike generic chatbots or naive vector search demos, AEIA solves the fundamenta
 11. **Client-Side Dynamic API Key Injection & Quota Resilience**: Per-request client Gemini API keys, local browser storage, and auto-retry countdown alerts avoiding shared server quota exhaustion ([ADR 0029](../decisions/0029-client-side-api-key-injection-and-quota-resilience.md)).
 12. **Unified SSE Streaming Protocol**: Single universal streaming endpoint routing across hybrid RAG and deterministic Git/AST agent tools with immediate citation streaming ([ADR 0030](../decisions/0030-unified-sse-streaming-protocol-for-rag-and-agent.md)).
 13. **Modern Python 3.12+ Standards & Ingestion Progress**: Codebase-wide PEP 585/604 type standardization, `tqdm` progress tracking for ingestion batches, and Qdrant Cloud API key authentication ([ADR 0031](../decisions/0031-codebase-type-modernization-and-ingestion-telemetry.md)).
+14. **Production Hardening — Credential Boundary & Async Correctness**: The backend API key moved out of the browser bundle behind Next.js proxy route handlers; blocking handlers declared `def` so FastAPI parallelizes them in its threadpool; atomic non-destructive ingestion; a SQLite embedding cache replacing the single-JSON-file format; an offline-first test suite (100 tests, ~26s, no Qdrant or API key); and GitHub Actions CI ([ADR 0032](../decisions/0032-production-hardening-credential-boundary-and-async-correctness.md)).
 
 ---
 
@@ -56,7 +57,7 @@ flowchart TD
 | :--- | :--- | :--- |
 | [**01 — Technology Stack & Prerequisites**](01-technology-stack-and-prerequisites.md) | Comprehensive reference for all core technologies, tools, libraries, algorithms, and theoretical concepts used in AEIA. | *"What technologies do I need to learn, and what hands-on exercises should I build first?"* |
 | [**02 — Architecture, Design & Patterns**](02-architecture-design-and-patterns.md) | Deep exploration of the architectural versions, software patterns, data flows, and error mitigation strategies. | *"How do the components connect together, and why was the system designed this way?"* |
-| [**03 — File-by-File Mastery Catalog**](03-file-by-file-mastery-catalog.md) | Comprehensive line-by-line inspection of all repository files, test suites, and 31 ADRs. | *"What does this line do, why is it here, and how do I safely edit or improve this file?"* |
+| [**03 — File-by-File Mastery Catalog**](03-file-by-file-mastery-catalog.md) | Comprehensive line-by-line inspection of all repository files, test suites, and 32 ADRs. | *"What does this line do, why is it here, and how do I safely edit or improve this file?"* |
 | [**04 — Step-by-Step Build Curriculum**](04-step-by-step-build-curriculum.md) | Structured 18-day interactive learning roadmap with concrete coding exercises from blank slate to production. | *"How do I build this entire system on my own from scratch?"* |
 | [**05 — Benchmarking, Evaluation & Contributing**](05-benchmarking-evaluation-and-contributing.md) | Explains retrieval metrics (Recall@K, MRR), the RAG Triad generation evaluation suite, CI automation, and contribution rules. | *"How do I verify my changes without regressing retrieval or generation performance?"* |
 
@@ -91,9 +92,9 @@ graph TD
 - **Goal**: Understand the service interface, concurrency, dependency injection, and security.
 - **Priority Reading**:
   1. Read [01 — Tech Stack](01-technology-stack-and-prerequisites.md) sections on **Python 3.12+**, **FastAPI**, **Pydantic V2**, **SlowAPI**, and **HMAC Webhook Auth**.
-  2. Read [02 — Architecture](02-architecture-design-and-patterns.md) on **Lifespan Management**, **Dual-Content Negotiation**, and **Typed Exceptions**.
+  2. Read [02 — Architecture](02-architecture-design-and-patterns.md) on **Lifespan Management**, **Dual-Content Negotiation**, **Typed Exceptions**, and **Pattern 13 — Sync Handlers for Blocking Work** (why these handlers are `def`, not `async def`).
   3. Study [03 — File Catalog](03-file-by-file-mastery-catalog.md) entries for [`src/api/main.py`](../../src/api/main.py), [`src/api/tasks.py`](../../src/api/tasks.py), [`src/api/webhook.py`](../../src/api/webhook.py), [`src/config.py`](../../src/config.py), and [`src/errors.py`](../../src/errors.py).
-  4. Run tests: `uv run pytest tests/test_api.py tests/test_ui.py tests/test_incremental_ingestion.py tests/test_error_handling.py -v`.
+  4. Run tests: `uv run pytest tests/test_api.py tests/test_ui.py tests/test_incremental_ingestion.py tests/test_error_handling.py tests/test_regressions.py -v`.
 
 ### Track B: The AI, Search & Information Retrieval Engineer
 - **Goal**: Master the RAG pipeline, Tree-Sitter AST parsing, structural block parsers, dense embeddings, BM25 Okapi, RRF ranking, LLM synthesis, and RAG Triad evaluations.
@@ -102,7 +103,8 @@ graph TD
   2. Read [02 — Architecture](02-architecture-design-and-patterns.md) on **Multi-Format Chunking**, **Hybrid Retrieval Strategy**, and **Semantic Prefix Injection**.
   3. Read Postmortem [`docs/postmortems/001-semantic-bias-config-retrieval.md`](../postmortems/001-semantic-bias-config-retrieval.md).
   4. Study [03 — File Catalog](03-file-by-file-mastery-catalog.md) entries for [`src/ingestion/chunker.py`](../../src/ingestion/chunker.py), [`src/ingestion/ast_chunker.py`](../../src/ingestion/ast_chunker.py), [`src/ingestion/block_parsers.py`](../../src/ingestion/block_parsers.py), [`src/ingestion/pipeline.py`](../../src/ingestion/pipeline.py), [`src/retrieval/retriever.py`](../../src/retrieval/retriever.py), [`src/generation/generator.py`](../../src/generation/generator.py), and [`evals/generation_eval.py`](../../evals/generation_eval.py).
-  5. Run benchmarks: `uv run python evals/run_eval.py --generation`.
+  5. Read [`src/ingestion/embedding_cache.py`](../../src/ingestion/embedding_cache.py) to see why the content-hash cache moved from a single JSON file to SQLite.
+  6. Run benchmarks: `uv run python evals/run_eval.py --generation`.
 
 ### Track C: The Agentic Systems & Protocol Engineer
 - **Goal**: Understand state graph routing, tool dispatch, multi-turn conversational session memory, coreference query rewriting, and Model Context Protocol (MCP) integrations.
@@ -116,8 +118,9 @@ graph TD
 - **Goal**: Master local container topology, production packaging, GitHub Actions CI, live git synchronization, and observability.
 - **Priority Reading**:
   1. Read [01 — Tech Stack](01-technology-stack-and-prerequisites.md) sections on **uv**, **Docker / Compose**, **Langfuse**, and **GitHub Actions**.
-  2. Study [03 — File Catalog](03-file-by-file-mastery-catalog.md) entries for [`Dockerfile`](../../Dockerfile), [`compose.yml`](../../compose.yml), [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), [`src/ingestion/git_sync.py`](../../src/ingestion/git_sync.py), and [`src/observability/__init__.py`](../../src/observability/__init__.py).
-  3. Run full test suite: `uv run pytest -v`.
+  2. Study [03 — File Catalog](03-file-by-file-mastery-catalog.md) entries for [`Dockerfile`](../../Dockerfile), [`compose.yml`](../../compose.yml), [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), [`src/ingestion/git_sync.py`](../../src/ingestion/git_sync.py), [`src/logging_config.py`](../../src/logging_config.py), and [`src/observability/__init__.py`](../../src/observability/__init__.py).
+  3. Read [02 — Architecture](02-architecture-design-and-patterns.md) on **Pattern 12 — Server-Side Credential Boundary**, then verify it yourself: `cd frontend && pnpm build && ! grep -r "$AEIA_API_KEY" .next/static/`.
+  4. Run full test suite: `uv run pytest -v` (offline, ~26s), then `AEIA_TEST_MODE=integration uv run pytest -v` against the real stack.
 
 ---
 
@@ -131,22 +134,21 @@ flowchart TD
 
     Root --> Cfg["<b>Root Config & Entrypoints</b><br/><code>pyproject.toml, uv.lock, Dockerfile, compose.yml, main.py</code>"]
     Root --> CI["<b>CI/CD Automation</b><br/><code>.github/workflows/ci.yml</code>"]
+    Root --> Front["<b>Web Console (frontend/)</b><br/><code>Next.js 16 console + server-side credential proxy</code>"]
     Root --> Src["<b>Application Core (src/)</b>"]
     Root --> Evals["<b>Evaluations (evals/)</b><br/><code>dataset.json, run_eval.py, generation_eval.py</code>"]
-    Root --> Tests["<b>Test Suites (tests/)</b><br/><code>14 test modules (72 automated unit & integration tests)</code>"]
-    Root --> Docs["<b>Documentation (docs/)</b><br/><code>decisions/ (25 ADRs), postmortems/, developer-guide/</code>"]
-    Root --> Tests["<b>Test Suites (tests/)</b><br/><code>15 test modules (76 automated unit & integration tests)</code>"]
-    Root --> Docs["<b>Documentation (docs/)</b><br/><code>decisions/ (26 ADRs), postmortems/, developer-guide/</code>"]
+    Root --> Tests["<b>Test Suites (tests/)</b><br/><code>17 test modules (100 offline-first tests)</code>"]
+    Root --> Docs["<b>Documentation (docs/)</b><br/><code>decisions/ (32 ADRs), postmortems/, developer-guide/</code>"]
     Root --> Corpus["<b>Target Corpus (corpus/)</b><br/><code>campus-connect (~94k LOC full-stack app)</code>"]
 
-    Src --> S_Ingest["<code>ingestion/</code><br/><i>chunker.py, ast_chunker.py, block_parsers.py, pipeline.py, git_sync.py</i>"]
+    Src --> S_Ingest["<code>ingestion/</code><br/><i>chunker.py, ast_chunker.py, block_parsers.py, pipeline.py, git_sync.py, embedding_cache.py</i>"]
     Src --> S_Ret["<code>retrieval/</code><br/><i>retriever.py (Hybrid RRF 70/30)</i>"]
     Src --> S_Gen["<code>generation/</code><br/><i>generator.py (Gemini 2.5 Flash / 3.6 Flash)</i>"]
     Src --> S_Agent["<code>agent/</code><br/><i>state.py, router.py, tools.py, graph.py, memory.py</i>"]
     Src --> S_Mcp["<code>mcp/</code><br/><i>server.py (2026-07-28 HTTP & Stdio)</i>"]
-    Src --> S_Api["<code>api/</code><br/><i>main.py, tasks.py, webhook.py, static/index.html (UI)</i>"]
+    Src --> S_Api["<code>api/</code><br/><i>main.py, tasks.py, webhook.py</i>"]
     Src --> S_Obs["<code>observability/</code><br/><i>Langfuse spans & latency</i>"]
-    Src --> S_Base["<code>src/</code> Base<br/><i>config.py, errors.py</i>"]
+    Src --> S_Base["<code>src/</code> Base<br/><i>config.py, errors.py, logging_config.py</i>"]
 
     style Root fill:#f0f7ff,stroke:#2563eb,stroke-width:2px
     style Src fill:#fdf4ff,stroke:#c026d3,stroke-width:2px
@@ -154,6 +156,7 @@ flowchart TD
     style Docs fill:#fef3c7,stroke:#d97706,stroke-width:2px
     style Tests fill:#eff6ff,stroke:#3b82f6,stroke-width:1px
     style Evals fill:#faf5ff,stroke:#a855f7,stroke-width:1px
+    style Front fill:#ecfeff,stroke:#0891b2,stroke-width:1px
 ```
 
 ---
@@ -177,23 +180,46 @@ uv sync --dev
 ```
 
 ### Step 3: Configure Environment Variables
-Create or verify your `.env` file at the repository root:
+Copy [`.env.example`](../../.env.example) to `.env` at the repository root and fill it in. The full set of supported keys lives in that file; the ones you need to get started:
 ```ini
-# Required for Gemini answer generation (Free tier key from https://aistudio.google.com/)
+# Required for Gemini answer generation (free key from https://aistudio.google.com/)
 GEMINI_API_KEY="your_api_key_here"
 
-# Qdrant vector database URL
+# Generation models. The first is preferred; fallbacks are tried only when it is
+# rate-limited or unavailable (JSON list syntax).
+GEMINI_MODEL=gemini-3.6-flash
+GEMINI_FALLBACK_MODELS=["gemini-2.5-flash","gemini-2.5-flash-lite"]
+
+# Vector DB
 QDRANT_URL="http://localhost:6333"
+QDRANT_API_KEY=""            # only needed for Qdrant Cloud
 COLLECTION_NAME="campus_connect"
+QDRANT_TIMEOUT=10            # seconds before a Qdrant call gives up, so it cannot hang forever
+
+CORPUS_PATH=./corpus/campus-connect
 
 # Authentication & Rate Limiting
 API_KEY="dev-key-change-me"
 RATE_LIMIT="20/minute"
 
+# Browser origins allowed to call this API directly (JSON list). The Next.js console
+# proxies through its own server, so this only lists origins that call the API from
+# client-side JavaScript. Never widen this to "*" — allow_credentials is False by design.
+CORS_ALLOW_ORIGINS=["http://localhost:3000"]
+
+# Hosts accepted by the MCP endpoint's DNS-rebinding protection (JSON list).
+# Must include the hostname MCP is actually reached at in production.
+MCP_ALLOWED_HOSTS=["localhost","127.0.0.1","testserver"]
+
+LOG_LEVEL=INFO
+
 # Optional: Langfuse tracing (leave empty to disable)
 LANGFUSE_PUBLIC_KEY=""
 LANGFUSE_SECRET_KEY=""
 LANGFUSE_HOST="https://cloud.langfuse.com"
+
+# Optional: HMAC-SHA256 secret for GitHub push webhook validation
+GITHUB_WEBHOOK_SECRET=""
 ```
 
 ### Step 4: Start Qdrant and Ingest Corpus
@@ -204,17 +230,51 @@ docker compose up -d qdrant
 # Ingest corpus (chunks codebase, embeds with FastEmbed, uploads to Qdrant)
 PYTHONPATH=. uv run python -m src.ingestion.pipeline
 ```
+Ingestion is **non-destructive**: it upserts then prunes stale points rather than dropping the collection, so the index stays queryable while a re-ingest runs. Embeddings are cached by content hash in `.cache/embeddings.sqlite3`, so a second run over an unchanged corpus is nearly instant.
 
 ### Step 5: Run the API Server & Verification Tests
 ```bash
 # Start FastAPI development server with hot reload
 PYTHONPATH=. uv run uvicorn src.api.main:app --reload --port 8000
 
-# In a separate terminal, run the automated test suite:
+# In a separate terminal, run the automated test suite.
+# This is offline by default: no Qdrant, no API key, ~26 seconds.
 uv run pytest -v
 
-# Run the retrieval benchmark:
+# Lint
+uv run ruff check .
+
+# Run the same tests against the real stack when you need end-to-end coverage:
+AEIA_TEST_MODE=integration uv run pytest -v
+
+# Run the retrieval benchmark (requires an ingested corpus):
 uv run python evals/run_eval.py
+```
+
+### Step 6: Run the Web Console
+The Next.js console lives in [`frontend/`](../../frontend/) and is where the backend credential boundary is enforced.
+
+```bash
+cd frontend
+pnpm install
+cp .env.example .env.local
+pnpm dev          # http://localhost:3000
+```
+
+Its `.env.local` needs two **server-only** variables:
+```ini
+AEIA_API_URL=http://localhost:8000
+AEIA_API_KEY=dev-key-change-me   # must match API_KEY in the root .env
+```
+
+> [!IMPORTANT]
+> These are deliberately **not** prefixed with `NEXT_PUBLIC_`. Next.js inlines every `NEXT_PUBLIC_`-prefixed value into the client bundle at build time, which would ship the backend key to every visitor. The browser talks only to the console's own route handlers under `frontend/src/app/api/aeia/*`, which attach `X-API-Key` server-side before forwarding to FastAPI ([ADR 0032](../decisions/0032-production-hardening-credential-boundary-and-async-correctness.md)).
+>
+> A user's *personal* Gemini key is the deliberate exception: it stays in their browser and travels per-request, because it is theirs to spend ([ADR 0029](../decisions/0029-client-side-api-key-injection-and-quota-resilience.md)).
+
+Frontend checks:
+```bash
+pnpm lint && pnpm typecheck && pnpm test && pnpm build
 ```
 
 ---

@@ -42,7 +42,7 @@ flowchart TB
     subgraph Ingestion["Ingestion & Embedding Layer"]
         Pipeline["src/ingestion/pipeline.py"]
         Chunker["src/ingestion/chunker.py (Semantic Prefixes)"]
-        Cache["EmbeddingCache (.cache/embedding_cache.json)"]
+        Cache["EmbeddingCache (.cache/embeddings.sqlite3)"]
         FastEmbed["FastEmbed (ONNX BGE-small-en-v1.5)"]
     end
 
@@ -204,7 +204,7 @@ timeline
 ### V12 — Interactive Web UI Playground & Visual Citation Inspector ([ADR 0022](../decisions/0022-interactive-web-playground-ui.md))
 - **Objective**: Deliver a zero-setup, graphical user interface for developers and evaluators to interact with AEIA without relying on curl or Swagger.
 - **Implementation**:
-  - Reactive single-page application at `src/api/static/index.html` (Tailwind CSS, Marked.js, Highlight.js).
+  - Reactive single-page application at `src/api/static/index.html` (Tailwind CSS, Marked.js, Highlight.js). *Superseded by [ADR 0028](../decisions/0028-decoupled-nextjs-frontend-console.md): this file no longer exists — the console now lives in [`frontend/`](../../frontend/).*
   - Mode toggle between Direct RAG and Agent workflows.
   - Slide-over drawer rendering the exact cited source code lines when citations are clicked.
   - Content negotiation on `GET /` delivering HTML to browsers and JSON to API clients.
@@ -358,7 +358,7 @@ graph TD
 
 **Problem**: Serving a single-file HTML frontend through FastAPI tightly couples UI rendering with backend CPU/memory cycles and lacks modern component state management, TypeScript type safety, and automated test frameworks.
 
-**Solution**: Retire `GET /ui` (returning 404) and standardize `GET /` as a pure headless API discovery endpoint returning JSON metadata. The user interface is cleanly decoupled into an independent Next.js 16 / React 19 web console in `frontend/`, deployed at zero cost on Vercel Edge with CORS-secured communications to the FastAPI gateway ([ADR 0028](../decisions/0028-decoupled-nextjs-frontend-console.md)).
+**Solution**: Retire `GET /ui` (returning 404) and standardize `GET /` as a pure headless API discovery endpoint returning JSON metadata. The user interface is cleanly decoupled into an independent Next.js 16 / React 19 web console in `frontend/`, deployed at zero cost on Vercel Edge. The browser no longer talks to FastAPI directly: it calls the console's own route handlers, which forward to the gateway server-side (see **Pattern 12**) ([ADR 0028](../decisions/0028-decoupled-nextjs-frontend-console.md), [ADR 0032](../decisions/0032-production-hardening-credential-boundary-and-async-correctness.md)).
 
 ### Pattern 10: Dynamic Client-Side API Key Injection & Quota Resilience
 *Files: [`src/generation/generator.py`](../../src/generation/generator.py), [`src/api/main.py`](../../src/api/main.py), [`frontend/src/components/aeia/settings-dialog.tsx`](../../frontend/src/components/aeia/settings-dialog.tsx)*
@@ -373,6 +373,26 @@ graph TD
 **Problem**: Clients previously had to guess whether a query required vector search (`/ask/stream`) or non-RAG tools (`/agent/ask`), resulting in fragmented endpoints and blocking delays for tool operations.
 
 **Solution**: All streaming is unified under `POST /ask/stream`. The router state machine executes within the streaming pipeline, immediately emitting verified source citations (<50ms) and streaming text tokens whether the answer was synthesized via dense/sparse RAG or deterministic Git/AST agent tools ([ADR 0030](../decisions/0030-unified-sse-streaming-protocol-for-rag-and-agent.md)).
+
+### Pattern 12: Server-Side Credential Boundary (Backend-for-Frontend Proxy)
+*Files: [`frontend/src/app/api/aeia/proxy.ts`](../../frontend/src/app/api/aeia/proxy.ts), [`frontend/src/app/api/aeia/`](../../frontend/src/app/api/aeia/), [`frontend/src/config/env.ts`](../../frontend/src/config/env.ts)*
+
+**Problem**: The console originally read the backend credential from `NEXT_PUBLIC_API_KEY`. Next.js inlines every `NEXT_PUBLIC_`-prefixed value into the client bundle at build time, so the API key protecting the gateway was shipped to every visitor and readable in `.next/static/`. A shared secret that reaches the browser is not a secret.
+
+**Solution**: The key moved server-side. Route handlers under `frontend/src/app/api/aeia/*` (`ask/stream`, `agent`, `health`) receive the browser's request, attach `X-API-Key` from the server-only `AEIA_API_KEY`, and forward to FastAPI — a Backend-for-Frontend. The browser never sees the credential, and `CORS_ALLOW_ORIGINS` narrows to origins that genuinely call the API from client-side JavaScript while `allow_credentials` stays `False`.
+
+> **Breaking change**: `NEXT_PUBLIC_API_KEY` → `AEIA_API_KEY`, and `NEXT_PUBLIC_API_URL` → `AEIA_API_URL`. Any deployment carrying the old names still publishes its key.
+
+Note the deliberate asymmetry with **Pattern 10**: a user's *own* Gemini key stays in their browser and travels per-request, because it is their credential to spend. The *shared* backend key never leaves the server.
+
+### Pattern 13: Sync Handlers for Blocking Work (Threadpool Offload)
+*Files: [`src/api/main.py`](../../src/api/main.py)*
+
+**Problem**: `/ask`, `/ask/stream`, `/agent/ask`, and `/health` were declared `async def` but their bodies performed *synchronous* blocking work — embedding a query, Qdrant round-trips, Gemini calls. An `async def` handler runs directly on the event loop, so every blocking call froze the entire server: concurrent requests serialized behind each other and even `/health` would hang while one query was generating.
+
+**Solution**: Those handlers are declared plain `def`. FastAPI then runs them in its threadpool, so blocking work parallelizes correctly and the event loop stays free. Handlers that genuinely await (`/ingest`, the webhook, exception handlers) remain `async def`.
+
+A second defect lived in the same place: `/ask` and `/ask/stream` each carried their own `@limiter.limit`, and the streaming route re-entered the non-streaming one, spending two rate-limit tokens per streaming request. Both now delegate to an undecorated `_ask_impl`, so a request costs exactly one token.
 
 ---
 
@@ -418,7 +438,7 @@ sequenceDiagram
         end
         Pipe->>Qdrant: upsert(points=[PointStruct(id=UUIDv5, vector, payload)])
     end
-    Pipe->>Cache: save() (.cache/embedding_cache.json)
+    Pipe->>Cache: commit batch (.cache/embeddings.sqlite3)
     Pipe-->>Dev: Ingestion Complete Summary (Hot-Reload BM25)
 ```
 
@@ -504,7 +524,6 @@ sequenceDiagram
     Graph-->>API: final_state
     API->>Mem: add_turn(session_id, question, answer)
     API-->>Client: HTTP 200 OK {route, answer, sources, session_id, rewritten_question, steps_taken}
-```
 ```
 
 ---

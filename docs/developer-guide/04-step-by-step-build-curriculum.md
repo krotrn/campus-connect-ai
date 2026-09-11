@@ -194,6 +194,8 @@ flowchart TD
              self._cache[self._hash(content)] = embedding
      ```
   2. Initialize `fastembed.TextEmbedding(model_name="BAAI/bge-small-en-v1.5")`.
+
+  > **Production evolution**: The JSON dictionary above is the right shape to learn with, but it does not survive a real corpus — it decodes every vector into Python floats on construction and rewrites the whole file on each save, so an interrupted write loses everything. Once the exercise works, read [`src/ingestion/embedding_cache.py`](../../src/ingestion/embedding_cache.py) to see the same interface (`get`/`put` keyed by content hash) backed by SQLite `float32` blobs with per-batch commits ([ADR 0032](../decisions/0032-production-hardening-credential-boundary-and-async-correctness.md)).
 - **Verification Milestone**: Embed 10 sample strings, save cache, reload, and verify cache hits return immediately without invoking the model.
 - **Codebase Reference**: [`../../src/ingestion/pipeline.py`](../../src/ingestion/pipeline.py#L52-L95).
 
@@ -349,7 +351,9 @@ flowchart TD
      - **Recall@5**: Percentage of queries where expected file is in top 5 results.
      - **Recall@10**: Percentage of queries where expected file is in top 10 results.
      - **MRR (Mean Reciprocal Rank)**: Average of $\frac{1}{\text{rank}_{\text{first\_hit}}}$.
-  3. Create [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) provisioning Qdrant service container, syncing `uv`, running ingestion, and executing `pytest`.
+  3. Create [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) with three parallel jobs: **backend** (`uv sync --frozen`, `ruff check .`, `pytest -q`), **frontend** (`pnpm lint`, `typecheck`, `test`, `build`), and **Docker image build**.
+
+     Note the workflow provisions **no Qdrant service container and no API keys**. The suite runs against the in-memory fakes in [`tests/conftest.py`](../../tests/conftest.py), which keeps CI at roughly 30 seconds and free of flaky external dependencies. Benchmarks that need the real stack are run deliberately, not on every push.
 - **Verification Milestone**:
   ```bash
   uv run python evals/run_eval.py
@@ -378,10 +382,15 @@ flowchart TD
   1. Scaffold [`frontend/`](../../frontend/) with Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4, and `shadcn/ui` primitives ([ADR 0028](../decisions/0028-decoupled-nextjs-frontend-console.md)).
   2. Implement `AnswerCard`, `CitationList`, `CodeModal`, `SettingsDialog`, `QuotaAlert`, and real-time SSE token streaming consumer ([ADR 0029](../decisions/0029-client-side-api-key-injection-and-quota-resilience.md), [ADR 0030](../decisions/0030-unified-sse-streaming-protocol-for-rag-and-agent.md)).
   3. Update [`src/api/main.py`](../../src/api/main.py) to return standard JSON discovery metadata on `GET /` and retire legacy `GET /ui` with HTTP 404.
+  4. **Put the backend credential behind a proxy.** Add route handlers under `frontend/src/app/api/aeia/*` that attach `X-API-Key` from the server-only `AEIA_API_KEY` and forward to FastAPI ([`proxy.ts`](../../frontend/src/app/api/aeia/proxy.ts)). The browser calls *your* routes; only the server holds the key ([ADR 0032](../decisions/0032-production-hardening-credential-boundary-and-async-correctness.md)).
+
+     Do **not** reach for `NEXT_PUBLIC_API_KEY`. Next.js inlines every `NEXT_PUBLIC_`-prefixed value into the client bundle at build time, which publishes the credential to every visitor — this is exactly the bug ADR 0032 fixed. A user's *own* Gemini key is different: it stays in their browser and travels per-request, because it is theirs to spend.
 - **Verification Milestone**:
   ```bash
   uv run pytest tests/test_ui.py tests/test_unified_stream.py -v
   cd frontend && pnpm test
+  # Prove the key never reached the browser:
+  pnpm build && ! grep -r "$AEIA_API_KEY" .next/static/
   ```
 
 ### Day 17: Multi-Format AST Parsing & Structural Block Grammars

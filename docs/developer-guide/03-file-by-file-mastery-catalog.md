@@ -14,31 +14,30 @@
 
 ```mermaid
 mindmap
-  root((AEIA Repository<br/>82 Files))
+  root((AEIA Repository<br/>99 tracked files<br/>excl. corpus/ & frontend/))
     Root & Infrastructure
       pyproject.toml, uv.lock
       .python-version, .gitignore, .env
-      Dockerfile, compose.yml, main.py
+      Dockerfile, compose.yml
       PRD.md, README.md
     CI/CD Workflows
       .github/workflows/ci.yml
     Core Source src/
-      config.py, errors.py
-      ingestion/ (chunker, ast_chunker, block_parsers, pipeline, git_sync)
+      config.py, errors.py, logging_config.py
+      ingestion/ (chunker, ast_chunker, block_parsers, pipeline, git_sync, embedding_cache)
       retrieval/ (retriever)
       generation/ (generator)
       observability/ (__init__)
       agent/ (state, tools, router, graph, memory)
       mcp/ (server, __init__)
-      api/ (main, tasks, webhook, static/index.html)
+      api/ (main, tasks, webhook)
     Evaluation Suite evals/
       dataset.json, run_eval.py, generation_eval.py, generation_benchmark.json
     Automated Test Suite tests/
-      14 Test Suites (72 passing tests)
-      15 Test Suites (76 passing tests)
+      conftest.py (offline fakes)
+      17 Test Modules (100 passing tests)
     ADRs docs/decisions/
-      README.md & 25 Decision Records
-      README.md & 26 Decision Records
+      README.md & 32 Decision Records
     Developer Guide docs/developer-guide/
       README.md & 5 Modular Manuals
     Postmortems & Data
@@ -118,12 +117,10 @@ mindmap
 - **Verification**: `docker compose up -d`
 - **How to Improve**: Add an optional Grafana/Prometheus or Langfuse local container service for full on-prem observability.
 
-### 1.8 `main.py`
-- **Relative Path**: [`../../main.py`](../../main.py)
-- **Role**: Minimal root standalone CLI entrypoint.
-- **Technologies Needed**: Standard Python scripts.
-- **Anatomy**: Prints `Hello from aeia!`. Serves as a quick sanity check that Python environment runs cleanly.
-- **How to Improve**: Transform into an interactive CLI shell using `typer` or `argparse` allowing direct terminal queries.
+### 1.8 `main.py` — *removed*
+- **Status**: Deleted. This was the `uv init` placeholder that printed `Hello from aeia!`; it had no role once the service acquired a real entrypoint.
+- **Where to start the app instead**: `PYTHONPATH=. uv run uvicorn src.api.main:app --reload --port 8000`, or `docker compose up`.
+- **How to Improve**: If a terminal client is wanted, add a `typer` CLI under `src/` and expose it via `[project.scripts]` in [`pyproject.toml`](../../pyproject.toml) rather than reviving a root-level script.
 
 ### 1.9 `PRD.md`
 - **Relative Path**: [`../../PRD.md`](../../PRD.md)
@@ -207,7 +204,9 @@ mindmap
 - **Role**: Complete codebase ingestion runner: scans files, manages SHA-256 embedding cache, computes embeddings with FastEmbed, and batch upserts points into Qdrant. Supports both full recreate and incremental delta-only indexing.
 - **Technologies Needed**: `fastembed.TextEmbedding`, `qdrant_client`, SHA-256 hashing, batch processing.
 - **Anatomy & Critical Lines**:
-  - `EmbeddingCache`: Disk-backed JSON cache (`.cache/embedding_cache.json`) mapping `sha256(content)` to 384-float vector.
+  - `EmbeddingCache`: Imported from [`embedding_cache.py`](../../src/ingestion/embedding_cache.py) (§3.4.2). SQLite-backed, mapping `sha256(content)` to a 384-dim `float32` vector.
+  - **Atomic run claim**: The ingestion state transition is made under a single lock, so two concurrent triggers cannot both start a run (a check-then-set race fixed in [ADR 0032](../decisions/0032-production-hardening-credential-boundary-and-async-correctness.md)).
+  - **Non-destructive by default**: `run()` upserts then prunes stale points rather than dropping the collection, so the index stays queryable throughout a re-ingest.
   - `_point_id()`: Computes deterministic 60-bit integers from `sha256(f"{file_path}::{chunk_index}")`, ensuring stable idempotent point IDs.
   - `_delete_points_for_file()`: Scrolls and deletes points matching a specific `file_path` filter before re-indexing.
   - `run(recreate=True)`: Recreates collection and indexes entire corpus.
@@ -221,6 +220,25 @@ mindmap
 - **Anatomy & Critical Lines**:
   - `GitPullResult`: Dataclass capturing `before_sha`, `after_sha`, `changed_files`, and `up_to_date`.
   - `pull_corpus()`: Captures HEAD commit, pulls `origin main`, resolves changed files via `git diff --name-only <before>..<after>`, and detects up-to-date state.
+
+### 3.4.2 `src/ingestion/embedding_cache.py`
+- **Relative Path**: [`../../src/ingestion/embedding_cache.py`](../../src/ingestion/embedding_cache.py)
+- **Role**: Content-addressed embedding cache backed by SQLite (`.cache/embeddings.sqlite3`). Re-ingesting an unchanged file costs a cheap lookup instead of a forward pass through the embedding model.
+- **Technologies Needed**: `sqlite3`, SHA-256 hashing, `numpy` `float32` buffers, WAL journaling.
+- **Anatomy & Critical Lines**:
+  - `content_hash(text)`: `sha256` of the UTF-8 chunk content — the cache key.
+  - `_SCHEMA`: One table, `embeddings(hash TEXT PRIMARY KEY, dim INTEGER, vec BLOB)`.
+  - `PRAGMA journal_mode=WAL` / `synchronous=NORMAL`: Concurrent reads during writes, with a crash-safe commit per batch rather than one rewrite of the entire corpus.
+  - `_migrate_legacy_json()`: One-time import of the pre-[ADR 0032](../decisions/0032-production-hardening-credential-boundary-and-async-correctness.md) `.cache/embedding_cache.json`, so an existing cache is not thrown away on upgrade.
+- **Why it replaced the JSON file**: The old format decoded every vector into Python floats on construction (tens of seconds, hundreds of MB of RAM) and rewrote the whole file on each save, so an interrupted write lost the lot.
+- **Verification**: `uv run pytest tests/test_incremental_ingestion.py -v`
+
+### 3.4.3 `src/logging_config.py`
+- **Relative Path**: [`../../src/logging_config.py`](../../src/logging_config.py)
+- **Role**: Single entry point for logging setup, so modules call `logging.getLogger(__name__)` and inherit consistent formatting and level instead of each configuring handlers (or printing).
+- **Technologies Needed**: `logging`, `logging.config`.
+- **Anatomy & Critical Lines**: Reads `LOG_LEVEL` from settings; installs one root handler; idempotent so repeated calls (tests, workers, the reloader) do not stack duplicate handlers.
+- **Verification**: `LOG_LEVEL=DEBUG PYTHONPATH=. uv run python -m src.ingestion.pipeline`
 
 ### 3.5 `src/retrieval/retriever.py`
 - **Relative Path**: [`../../src/retrieval/retriever.py`](../../src/retrieval/retriever.py)
@@ -334,11 +352,9 @@ mindmap
 - **Technologies Needed**: `hmac`, `hashlib`, FastAPI `Request`, constant-time digest verification.
 - **Anatomy**: Validates `X-Hub-Signature-256`, filters for `refs/heads/main`, executes `pull_corpus()`, schedules incremental ingestion in background, and responds with `202 Accepted`.
 
-### 3.16 `src/api/static/index.html`
-- **Relative Path**: [`../../src/api/static/index.html`](../../src/api/static/index.html)
-- **Role**: Zero-dependency, single-page application serving as the interactive engineering intelligence console and playground.
-- **Technologies Needed**: Tailwind CSS, Marked.js, Highlight.js, Vanilla JS.
-- **Anatomy**: Features mode switching (Pure RAG vs. LangGraph Agent), prompt starters, Markdown rendering with syntax highlighting, telemetry cards, and an interactive slide-over code inspector drawer for verified source citations.
+### 3.16 `src/api/static/index.html` — *removed*
+- **Status**: Deleted. The single-file Tailwind/Marked.js console was retired by [ADR 0028](../decisions/0028-decoupled-nextjs-frontend-console.md) in favour of the Next.js console in [`frontend/`](../../frontend/) (see §7). `GET /ui` now returns 404 and `GET /` returns JSON service discovery — [`tests/test_ui.py`](../../tests/test_ui.py) pins both.
+- **Why it is still listed**: So that older ADRs, screenshots, and commit messages referring to it remain traceable to its replacement.
 
 ---
 
@@ -366,13 +382,14 @@ mindmap
 
 ## 5. Automated Test Suites (`tests/`)
 
-All test suites use `pytest` and can be run simultaneously via `uv run pytest -v`.
+All test suites use `pytest` and can be run simultaneously via `uv run pytest -v`. The full run is **offline by default** — no Qdrant, no API key, ~26 seconds — because [`conftest.py`](../../tests/conftest.py) substitutes in-memory fakes. Set `AEIA_TEST_MODE=integration` to run the same tests against a live stack.
 
 | Test File | Target Under Test | Key Assertions & Scenarios |
 | :--- | :--- | :--- |
 | [`../../tests/test_chunker.py`](../../tests/test_chunker.py) | `CodeAwareChunker` | TypeScript interface preservation, line numbers, Markdown headings, empty file handling. |
 | [`../../tests/test_retriever.py`](../../tests/test_retriever.py) | `Retriever` | Verifies top_k chunk counts, non-empty citations, `#L` line patterns, positive scores. |
-| [`../../tests/test_api.py`](../../tests/test_api.py) | `src/api/main.py` | Validates root, health, missing/invalid `X-API-Key` rejection (401/422), valid `/ask` responses. |
+| [`../../tests/conftest.py`](../../tests/conftest.py) | Shared fixtures | Supplies in-memory fakes for Qdrant, the embedding model, and Gemini; defines the `real_router` marker that opts a test out of the offline routing fake. |
+| [`../../tests/test_api.py`](../../tests/test_api.py) | `src/api/main.py` | Validates root, health, missing/invalid `X-API-Key` rejection (**401** — missing auth is an authentication failure, not a validation error), valid `/ask` responses. |
 | [`../../tests/test_agent_router.py`](../../tests/test_agent_router.py) | `src/agent/router.py` | Tests regex routing for commit hashes, git log queries, and dependency questions. |
 | [`../../tests/test_agent_tools.py`](../../tests/test_agent_tools.py) | `src/agent/tools.py` | Tests safe `git log`, valid commit diff, command injection rejection (`rm -rf`), and Redis dependent scan. |
 | [`../../tests/test_agent_api.py`](../../tests/test_agent_api.py) | `POST /agent/ask` | Tests agent auth, routing execution, `use_agent` flag on `/ask`, and step audit logging. |
@@ -386,6 +403,7 @@ All test suites use `pytest` and can be run simultaneously via `uv run pytest -v
 | [`../../tests/test_memory.py`](../../tests/test_memory.py) | Multi-Turn Memory | Tests sliding-window session management, standalone query bypass, LLM pronoun rewriting, and API integration. |
 | [`../../tests/test_stream.py`](../../tests/test_stream.py) | SSE Streaming | Tests `POST /ask/stream` and `stream=True` flag, `text/event-stream` headers, and event sequence (`sources`, `token`, `done`). |
 | [`../../tests/test_unified_stream.py`](../../tests/test_unified_stream.py) | Unified Stream Routing | Tests unified streaming across `direct_rag`, `git_commit`, and `file_dependents` routes under a single SSE contract. |
+| [`../../tests/test_regressions.py`](../../tests/test_regressions.py) | Previously-fixed defects | One test per bug fixed in [ADR 0032](../decisions/0032-production-hardening-credential-boundary-and-async-correctness.md) — double-counted streaming rate limit, ingestion check-then-set race, missing-auth status code, credential leakage, and others. A fixed bug cannot return silently. |
 
 ---
 
@@ -424,6 +442,7 @@ Every major technical choice is documented as an ADR:
 - [`0029-client-side-api-key-injection-and-quota-resilience.md`](../decisions/0029-client-side-api-key-injection-and-quota-resilience.md): Client-Side Dynamic API Key Injection & LLM Quota Resilience.
 - [`0030-unified-sse-streaming-protocol-for-rag-and-agent.md`](../decisions/0030-unified-sse-streaming-protocol-for-rag-and-agent.md): Unified Server-Sent Events (SSE) Streaming Protocol for RAG & Agentic Routing.
 - [`0031-codebase-type-modernization-and-ingestion-telemetry.md`](../decisions/0031-codebase-type-modernization-and-ingestion-telemetry.md): Modernized Python 3.12+ Type Annotation Standard & Ingestion Progress Instrumentation.
+- [`0032-production-hardening-credential-boundary-and-async-correctness.md`](../decisions/0032-production-hardening-credential-boundary-and-async-correctness.md): Production Hardening — server-side credential boundary, sync-handler threadpool offload, SQLite embedding cache, offline-first tests, and GitHub Actions CI.
 
 ---
 
@@ -434,13 +453,23 @@ The AEIA Web Console is an independent Next.js 16 (App Router) / React 19 applic
 | File / Component | Role & Functionality |
 | :--- | :--- |
 | [`frontend/src/app/page.tsx`](../../frontend/src/app/page.tsx) | Main interactive console orchestrating question submission, streaming response accumulation, citations state, and quota alert bindings. |
-| [`frontend/src/components/aeia/answer-card.tsx`](../../frontend/src/components/aeia/answer-card.tsx) | Renders token-by-token streaming markdown with syntax highlighting, copy-to-clipboard, and citation chips. |
-| [`frontend/src/components/aeia/citation-list.tsx`](../../frontend/src/components/aeia/citation-list.tsx) | Grid of verified citation badges displaying relative paths, `#L` line numbers, and RRF relevance scores. |
+| [`frontend/src/components/aeia/chat-message-item.tsx`](../../frontend/src/components/aeia/chat-message-item.tsx) | Renders a single chat turn: streaming assistant markdown, copy-to-clipboard, and the citation chips that open the code modal. Replaces the former `answer-card.tsx` + `citation-list.tsx` pair. |
+| [`frontend/src/components/aeia/markdown-view.tsx`](../../frontend/src/components/aeia/markdown-view.tsx) | Markdown renderer with syntax highlighting and a streaming-aware cursor. |
+| [`frontend/src/components/aeia/chat-sidebar.tsx`](../../frontend/src/components/aeia/chat-sidebar.tsx) | Session list, new-chat control, and the backend health indicator driven by `use-aeia-health`. |
+| [`frontend/src/components/aeia/query-input.tsx`](../../frontend/src/components/aeia/query-input.tsx) | Composer with submit/stop controls for an in-flight stream. |
+| [`frontend/src/components/aeia/empty-console.tsx`](../../frontend/src/components/aeia/empty-console.tsx) | Zero-state with suggested starter prompts. |
+| [`frontend/src/components/aeia/error-banner.tsx`](../../frontend/src/components/aeia/error-banner.tsx) | Inline error surface with a shortcut into the settings dialog. |
 | [`frontend/src/components/aeia/code-modal.tsx`](../../frontend/src/components/aeia/code-modal.tsx) | Slide-over drawer rendering the exact retrieved source chunk with line numbers for grounding verification. |
-| [`frontend/src/components/aeia/settings-dialog.tsx`](../../frontend/src/components/aeia/settings-dialog.tsx) | Modal for setting custom API URL, backend auth key, and client-provided Gemini API key (persisted in `localStorage`). |
+| [`frontend/src/components/aeia/settings-dialog.tsx`](../../frontend/src/components/aeia/settings-dialog.tsx) | Modal for choosing proxy mode (default) or a custom backend URL, and for supplying a personal Gemini API key (persisted in `localStorage`). The **backend** key is no longer entered here — it lives server-side ([ADR 0032](../decisions/0032-production-hardening-credential-boundary-and-async-correctness.md)). |
 | [`frontend/src/components/aeia/quota-alert.tsx`](../../frontend/src/components/aeia/quota-alert.tsx) | Alert banner triggered on HTTP 429 quota exhaustion with animated countdown and 1-click retry. |
-| [`frontend/src/components/aeia/telemetry-bar.tsx`](../../frontend/src/components/aeia/telemetry-bar.tsx) | Displays route audit (`direct_rag`, `git_commit`, etc.), latency metrics, and citation counts. |
-| [`frontend/src/services/aeia.service.ts`](../../frontend/src/services/aeia.service.ts) | Resilient SSE stream consumer parsing `sources`, `token`, `done`, and `error` events. |
+| [`frontend/src/services/aeia.service.ts`](../../frontend/src/services/aeia.service.ts) | Resilient SSE stream consumer parsing `sources`, `token`, `done`, and `error` events. Resolves endpoints through the proxy by default. |
+| [`frontend/src/app/api/aeia/proxy.ts`](../../frontend/src/app/api/aeia/proxy.ts) | **Credential boundary.** Shared helper that attaches the server-only `AEIA_API_KEY` as `X-API-Key` and forwards the request to FastAPI. The browser never sees the key. |
+| [`frontend/src/app/api/aeia/ask/stream/route.ts`](../../frontend/src/app/api/aeia/ask/stream/route.ts) | Route handler proxying the unified SSE stream, piping the upstream body through without buffering so tokens arrive incrementally. |
+| [`frontend/src/app/api/aeia/agent/route.ts`](../../frontend/src/app/api/aeia/agent/route.ts) | Route handler proxying `POST /agent/ask`. |
+| [`frontend/src/app/api/aeia/health/route.ts`](../../frontend/src/app/api/aeia/health/route.ts) | Route handler proxying `GET /health` for the console's status indicator. |
+| [`frontend/src/app/api/aeia/proxy.test.ts`](../../frontend/src/app/api/aeia/proxy.test.ts) | Asserts the proxy attaches credentials server-side and never echoes them back to the client. Runs in Vitest's `node` environment, not `jsdom`. |
+| [`frontend/src/config/env.ts`](../../frontend/src/config/env.ts) | Validates environment variables and enforces the server-only/public split — reading `AEIA_API_KEY` from a client component is a build-time error. |
+| [`frontend/src/hooks/queries/use-aeia-health.ts`](../../frontend/src/hooks/queries/use-aeia-health.ts) | React Query hook polling backend health declaratively (`refetchInterval` + retry), replacing a `setState`-in-`useEffect` loop. Exposes `refetch` for manual retries. |
 
 ---
 

@@ -230,8 +230,10 @@ Many AI setups require a dedicated GPU or paid cloud embedding APIs (e.g. OpenAI
 1. **Dense Semantic Vectors**: Text is converted into a vector $\vec{v} \in \mathbb{R}^{384}$. Semantic similarity between two texts corresponds to the cosine of the angle between their vectors:
    $$\text{Cosine Similarity}(\vec{u}, \vec{v}) = \frac{\vec{u} \cdot \vec{v}}{\|\vec{u}\| \|\vec{v}\|}$$
 2. **Content-Hash Caching (`EmbeddingCache`)**:
-   Computing embeddings is computationally heavy. AEIA implements a SHA-256 cache (`.cache/embedding_cache.json`). When re-ingesting the repository, only new or modified chunks are embedded. Unchanged chunks load in milliseconds:
+   Computing embeddings is computationally heavy. AEIA implements a SHA-256 cache in SQLite (`.cache/embeddings.sqlite3`, see [`src/ingestion/embedding_cache.py`](../../src/ingestion/embedding_cache.py)). When re-ingesting the repository, only new or modified chunks are embedded. Unchanged chunks load in milliseconds:
    $$\text{Key} = \text{SHA256}(\text{chunk\_content})$$
+
+   The cache was a single JSON file until [ADR 0032](../decisions/0032-production-hardening-credential-boundary-and-async-correctness.md). That format decoded every vector in the corpus into Python floats on construction — tens of seconds and hundreds of megabytes for a corpus this size — and rewrote the whole file on each save, so an interrupted write lost everything. Vectors are now stored as `float32` blobs, read back only for the hashes actually requested, and committed per batch. A legacy `embedding_cache.json` is migrated automatically on first construction.
 3. **Batch Processing**:
    Embedding chunks in batches of 128 maximizes CPU cache utilization and vectorized AVX2/AVX-512 instruction throughput.
 
@@ -675,12 +677,16 @@ AEIA runs as an isolated 2-container topology via Docker Compose:
 ## 15. Automated Testing & Continuous Integration (Pytest & GitHub Actions)
 
 ### Why We Use It ([ADR 0011](../decisions/0011-automated-testing-strategy.md))
-To ensure reliability, AEIA maintains 14 automated test suites with 100% pass rates (72 automated tests) covering every component from chunking to MCP protocols.
+To ensure reliability, AEIA maintains 17 automated test modules with 100% pass rates (100 automated tests) covering every component from chunking to MCP protocols.
+
+Since [ADR 0032](../decisions/0032-production-hardening-credential-boundary-and-async-correctness.md) the suite is **offline-first**: [`tests/conftest.py`](../../tests/conftest.py) supplies in-memory fakes for Qdrant, the embedding model, and Gemini, so the full run takes ~26 seconds and needs no running vector database and no API key. Set `AEIA_TEST_MODE=integration` to run the same tests against the real stack.
 
 ### Core Concepts to Master
 - `pytest.fixture`: Creating reusable client fixtures (`TestClient(app)`).
 - `unittest.mock.patch.object`: Mocking external network calls (e.g. simulating Gemini API `429 RESOURCE_EXHAUSTED` errors or Qdrant connection drops).
-- GitHub Actions Service Containers: Spinning up a live Qdrant container on CI runners, executing ingestion, and running `pytest`.
+- **Offline fakes vs. integration mode**: `conftest.py` swaps the heavy dependencies for in-memory doubles by default. Tests that must exercise the real router opt out with the `real_router` marker.
+- **Regression pinning**: [`tests/test_regressions.py`](../../tests/test_regressions.py) holds one test per previously-fixed defect, so a bug that has been fixed once cannot return silently.
+- GitHub Actions: [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) runs backend lint and tests, frontend lint/typecheck/test/build, and a Docker image build on every push and pull request.
 
 ### Relevant Codebase Files
 - [`tests/`](../../tests/)
