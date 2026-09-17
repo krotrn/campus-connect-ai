@@ -20,10 +20,11 @@ RUN uv sync --frozen --no-dev
 # Copy application source code
 COPY src/ ./src/
 
-# The corpus is a runtime input, not a build artifact: mount it as a volume
-# (see compose.yml). Create the mount point so a missing volume fails loudly
-# at the corpus check rather than at an unexpected path error.
-RUN mkdir -p /app/corpus /app/.cache
+# Clone the target corpus so it is available even without a volume mount
+# (e.g. on Render). When running via docker-compose the volume mount
+# at /app/corpus shadows this layer, which is fine.
+RUN mkdir -p /app/.cache \
+    && git clone --depth 1 https://github.com/coding-pundit-nitap/campus-connect.git /app/corpus/campus-connect
 
 # Create non-root user for security
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
@@ -36,4 +37,6 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
     CMD ["uv", "run", "python", "-c", \
          "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4).status==200 else 1)"]
 
-CMD ["uv", "run", "uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Pull latest corpus changes on startup, then launch the server.
+CMD git -C /app/corpus/campus-connect pull --ff-only origin main 2>/dev/null; \
+    exec uv run uvicorn src.api.main:app --host 0.0.0.0 --port 8000
