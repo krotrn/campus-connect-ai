@@ -76,12 +76,12 @@ function SettingsDialogForm({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="flex flex-col w-full max-w-md rounded-xl border border-border bg-slate-900 shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
+      <div className="flex flex-col w-full h-full sm:h-auto sm:max-w-md max-h-dvh sm:max-h-[90vh] rounded-none sm:rounded-xl border-0 sm:border border-border bg-[#0e0d0b] shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-border/60 bg-slate-950 px-5 py-4">
+        <div className="flex items-center justify-between border-b border-border/60 bg-[#0b0a08] px-4 sm:px-5 py-4 shrink-0">
           <div className="flex items-center gap-2">
-            <Server className="size-4 text-emerald-400" />
+            <Server className="size-4 text-moss-400" />
             <h2 className="text-sm font-semibold text-foreground">Backend Configuration</h2>
           </div>
           <button
@@ -93,9 +93,9 @@ function SettingsDialogForm({
         </div>
 
         {/* Form Body */}
-        <div className="p-5 space-y-4 text-xs">
+        <div className="p-4 sm:p-5 space-y-4 text-xs overflow-y-auto">
           <div>
-            <label className="block font-medium text-slate-300 mb-1.5 flex items-center gap-1.5">
+            <label className="block font-medium text-stone-300 mb-1.5 flex items-center gap-1.5">
               <Server className="size-3.5 text-muted-foreground" />
               <span>FastAPI Backend URL</span>
             </label>
@@ -104,7 +104,7 @@ function SettingsDialogForm({
               placeholder="Leave empty to use this app's configured backend"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              className="bg-slate-950 border-border text-xs"
+              className="bg-[#0b0a08] border-border text-xs"
             />
             <p className="mt-1 text-[11px] text-muted-foreground">
               Optional. Leave empty and requests go through this app&apos;s server, which
@@ -114,7 +114,7 @@ function SettingsDialogForm({
           </div>
 
           <div>
-            <label className="block font-medium text-slate-300 mb-1.5 flex items-center gap-1.5">
+            <label className="block font-medium text-stone-300 mb-1.5 flex items-center gap-1.5">
               <KeyRound className="size-3.5 text-muted-foreground" />
               <span>AEIA API Key (for a custom backend)</span>
             </label>
@@ -124,7 +124,7 @@ function SettingsDialogForm({
               value={key}
               onChange={(e) => setKey(e.target.value)}
               disabled={!url.trim()}
-              className="bg-slate-950 border-border text-xs disabled:opacity-50"
+              className="bg-[#0b0a08] border-border text-xs disabled:opacity-50"
             />
             <p className="mt-1 text-[11px] text-muted-foreground">
               Only used with a custom backend URL, and sent only to that host. The
@@ -134,7 +134,7 @@ function SettingsDialogForm({
           </div>
 
           <div>
-            <label className="block font-medium text-slate-300 mb-1.5 flex items-center justify-between">
+            <label className="block font-medium text-stone-300 mb-1.5 flex items-center justify-between">
               <span className="flex items-center gap-1.5">
                 <Sparkles className="size-3.5 text-amber-400" />
                 <span>Google Gemini API Key (Client Quota Override)</span>
@@ -153,7 +153,7 @@ function SettingsDialogForm({
               placeholder="e.g. AIzaSy..."
               value={geminiKey}
               onChange={(e) => setGeminiKey(e.target.value)}
-              className="bg-slate-950 border-border text-xs"
+              className="bg-[#0b0a08] border-border text-xs"
             />
             <p className="mt-1 text-[11px] text-muted-foreground">
               Optional. Used directly for answer synthesis whenever the backend quota is exhausted (HTTP 429).
@@ -164,12 +164,12 @@ function SettingsDialogForm({
             <div
               className={`p-3 rounded-lg border text-xs flex items-start gap-2 ${
                 testResult.success
-                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                  ? "bg-moss-500/10 border-moss-500/30 text-moss-300"
                   : "bg-rose-500/10 border-rose-500/30 text-rose-300"
               }`}
             >
               {testResult.success ? (
-                <Check className="size-4 shrink-0 text-emerald-400 mt-0.5" />
+                <Check className="size-4 shrink-0 text-moss-400 mt-0.5" />
               ) : (
                 <AlertCircle className="size-4 shrink-0 text-rose-400 mt-0.5" />
               )}
@@ -179,16 +179,16 @@ function SettingsDialogForm({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between border-t border-border/60 bg-slate-950/60 px-5 py-3 text-xs">
+        <div className="flex items-center justify-between border-t border-border/60 bg-[#0b0a08]/60 px-4 sm:px-5 py-3 text-xs shrink-0 gap-2">
           <Button
             size="sm"
             variant="outline"
             disabled={testing}
             onClick={handleTestConnection}
-            className="h-8 text-xs flex items-center gap-1.5 border-border hover:bg-slate-800"
+            className="h-8 text-xs flex items-center gap-1.5 border-border hover:bg-stone-800"
           >
             {testing && <Loader2 className="size-3 animate-spin" />}
-            <span>Test Connection</span>
+            <span>Test connection</span>
           </Button>
 
           <div className="flex items-center gap-2">
@@ -203,9 +203,9 @@ function SettingsDialogForm({
             <Button
               size="sm"
               onClick={handleSave}
-              className="h-8 text-xs bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold"
+              className="h-8 text-xs bg-moss-500 hover:bg-moss-400 text-stone-950 font-semibold"
             >
-              Save Changes
+              Save changes
             </Button>
           </div>
         </div>

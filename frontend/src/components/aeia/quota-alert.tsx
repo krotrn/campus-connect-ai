@@ -59,7 +59,7 @@ export function QuotaAlert({ onRetry }: QuotaAlertProps) {
               setSaved(false);
             }}
             placeholder="Paste your Gemini API key (e.g. AIzaSy...)"
-            className="pl-9 pr-8 bg-slate-950/90 border-amber-500/40 text-xs text-amber-100 placeholder:text-amber-400/40 focus-visible:ring-amber-500/50 h-9"
+            className="pl-9 pr-8 bg-[#0b0a08]/90 border-amber-500/40 text-xs text-amber-100 placeholder:text-amber-400/40 focus-visible:ring-amber-500/50 h-9"
           />
           <button
             type="button"
@@ -76,7 +76,7 @@ export function QuotaAlert({ onRetry }: QuotaAlertProps) {
             type="submit"
             size="sm"
             disabled={!apiKey.trim()}
-            className="h-9 text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold gap-1.5 shadow-sm transition disabled:opacity-50"
+            className="h-9 text-xs bg-amber-500 hover:bg-amber-400 text-stone-950 font-semibold gap-1.5 shadow-sm transition disabled:opacity-50"
           >
             {saved ? (
               <>

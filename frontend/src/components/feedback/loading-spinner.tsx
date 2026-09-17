@@ -25,12 +25,12 @@ export function LoadingSpinner({
     >
       <div
         className={cn(
-          "animate-spin rounded-full border-solid border-blue-600 border-t-transparent dark:border-blue-400 dark:border-t-transparent",
+          "animate-spin rounded-full border-solid border-moss-500 border-t-transparent",
           sizeStyles[size],
           className
         )}
       />
-      {label && <span className="text-xs text-slate-500">{label}</span>}
+      {label && <span className="text-xs text-muted-foreground">{label}</span>}
     </div>
   );
 }

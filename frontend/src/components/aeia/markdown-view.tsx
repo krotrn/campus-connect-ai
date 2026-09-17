@@ -39,20 +39,20 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
   };
 
   return (
-    <div className="my-3 overflow-hidden rounded-lg border border-border bg-slate-950 font-mono text-xs shadow-md">
-      <div className="flex items-center justify-between border-b border-border/40 bg-slate-900/80 px-3 py-1.5 text-[11px] text-muted-foreground">
-        <span className="font-semibold uppercase text-emerald-400">
+    <div className="my-3 overflow-hidden rounded-lg border border-border bg-[#0b0a08] font-mono text-xs shadow-md">
+      <div className="flex items-center justify-between border-b border-border/40 bg-[#131110] px-3 py-1.5 text-[11px] text-muted-foreground">
+        <span className="font-medium text-moss-400">
           {language || "code"}
         </span>
         <button
           onClick={handleCopy}
-          className="flex items-center gap-1 rounded px-2 py-0.5 text-slate-300 hover:bg-slate-800 hover:text-white transition"
+          className="flex items-center gap-1 rounded px-2 py-0.5 text-stone-300 hover:bg-stone-800 hover:text-white transition"
           title="Copy code"
         >
           {copied ? (
             <>
-              <Check className="size-3 text-emerald-400" />
-              <span className="text-emerald-400">Copied</span>
+              <Check className="size-3 text-moss-400" />
+              <span className="text-moss-400">Copied</span>
             </>
           ) : (
             <>
@@ -62,7 +62,7 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
           )}
         </button>
       </div>
-      <pre className="overflow-x-auto p-3 text-slate-200">
+      <pre className="overflow-x-auto p-3 text-stone-200">
         <code>{code}</code>
       </pre>
     </div>
@@ -193,7 +193,7 @@ function parseMarkdown(text: string): React.ReactNode[] {
       nodes.push(
         <blockquote
           key={`quote-${i}`}
-          className="border-l-2 border-emerald-500 pl-3 my-2 text-muted-foreground italic text-xs"
+          className="border-l-2 border-moss-500 pl-3 my-2 text-muted-foreground italic text-xs"
         >
           {renderInlineFormatting(line.slice(2))}
         </blockquote>
@@ -242,7 +242,7 @@ function renderInlineFormatting(text: string): React.ReactNode {
       parts.push(
         <code
           key={`code-${match.index}`}
-          className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs font-medium text-emerald-400"
+          className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs font-medium text-moss-400"
         >
           {token.slice(1, -1)}
         </code>
@@ -268,7 +268,7 @@ function renderInlineFormatting(text: string): React.ReactNode {
             href={linkMatch[2]}
             target="_blank"
             rel="noreferrer"
-            className="text-emerald-400 underline underline-offset-2 hover:text-emerald-300"
+            className="text-moss-400 underline underline-offset-2 hover:text-moss-300"
           >
             {linkMatch[1]}
           </a>

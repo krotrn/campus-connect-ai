@@ -41,11 +41,11 @@ export function ChatMessageItem({
   if (message.role === "user") {
     return (
       <div className="flex justify-end w-full py-2">
-        <div className="flex items-start gap-2.5 max-w-[85%] sm:max-w-[75%]">
-          <div className="rounded-2xl bg-emerald-500/10 border border-emerald-500/25 text-zinc-100 px-4 py-2.5 text-xs sm:text-sm font-mono shadow-sm leading-relaxed whitespace-pre-wrap">
+        <div className="flex items-start gap-2.5 max-w-[88%] sm:max-w-[75%]">
+          <div className="rounded-2xl bg-moss-500/10 border border-moss-500/25 text-stone-100 px-3.5 sm:px-4 py-2.5 text-xs sm:text-sm font-mono shadow-sm leading-relaxed whitespace-pre-wrap">
             {message.content}
           </div>
-          <div className="flex size-7 shrink-0 select-none items-center justify-center rounded-full bg-zinc-800 border border-white/10 text-zinc-300">
+          <div className="flex size-7 shrink-0 select-none items-center justify-center rounded-full bg-stone-800 border border-white/10 text-stone-300">
             <User className="size-3.5" />
           </div>
         </div>
@@ -55,22 +55,22 @@ export function ChatMessageItem({
 
   return (
     <div className="flex w-full py-3">
-      <div className="flex items-start gap-3 w-full">
+      <div className="flex items-start gap-2.5 sm:gap-3 w-full">
         {/* Assistant Avatar */}
-        <div className="flex size-7 shrink-0 select-none items-center justify-center rounded-lg bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 mt-0.5 shadow-sm">
+        <div className="flex size-7 shrink-0 select-none items-center justify-center rounded-lg bg-moss-500/10 border border-moss-500/25 text-moss-400 mt-0.5 shadow-sm">
           <Sparkles className="size-3.5" />
         </div>
 
         {/* Message Content Container */}
         <div className="flex-1 min-w-0 space-y-2.5 font-mono">
           {/* Header */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-white tracking-tight">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-xs font-semibold text-white tracking-tight shrink-0">
                 AEIA
               </span>
               {message.telemetry?.route && (
-                <span className="text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded">
+                <span className="text-[10px] text-moss-400 bg-moss-500/10 border border-moss-500/20 px-1.5 py-0.5 rounded truncate">
                   {message.telemetry.route.replace("Autonomous Agent → ", "").replace("Autonomous Engine → ", "")}
                 </span>
               )}
@@ -79,13 +79,13 @@ export function ChatMessageItem({
             {message.content && !message.isStreaming && (
               <button
                 onClick={handleCopy}
-                className="flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] text-zinc-400 hover:text-white hover:bg-zinc-800 transition"
+                className="flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] text-stone-400 hover:text-white hover:bg-stone-800 transition shrink-0"
                 title="Copy response"
               >
                 {copied ? (
                   <>
-                    <Check className="size-3 text-emerald-400" />
-                    <span className="text-emerald-400">Copied</span>
+                    <Check className="size-3 text-moss-400" />
+                    <span className="text-moss-400">Copied</span>
                   </>
                 ) : (
                   <>
@@ -99,18 +99,17 @@ export function ChatMessageItem({
 
           {/* Expanded Context Query (if query was rewritten) */}
           {message.rewrittenQuery && (
-            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-1.5 text-xs text-emerald-300/90 flex items-center gap-2">
-              <Sparkles className="size-3 text-emerald-400 shrink-0" />
+            <div className="border-l-2 border-amber-500/40 bg-amber-500/[0.04] pl-3 py-1.5 text-xs text-amber-200/80 flex items-center gap-2">
               <span className="truncate">
-                <b>Expanded Query:</b> {message.rewrittenQuery}
+                Expanded query: {message.rewrittenQuery}
               </span>
             </div>
           )}
 
           {/* Streaming Loading Indicator */}
           {message.isStreaming && !message.content && (
-            <div className="flex items-center gap-2 text-xs text-zinc-500 py-3 animate-pulse">
-              <Loader2 className="size-3.5 animate-spin text-emerald-400" />
+            <div className="flex items-center gap-2 text-xs text-stone-500 py-3 animate-pulse">
+              <Loader2 className="size-3.5 animate-spin text-moss-400" />
               <span>Analyzing codebase & synthesizing response...</span>
             </div>
           )}
@@ -123,14 +122,14 @@ export function ChatMessageItem({
             />
           )}
 
-          {/* Citations Chips */}
+          {/* Citations: styled like grep results, grounding the answer in exact source lines */}
           {message.sources && message.sources.length > 0 && (
-            <div className="pt-2 border-t border-white/8 space-y-1.5">
-              <div className="flex items-center gap-1.5 text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
-                <FileCode2 className="size-3 text-emerald-400" />
-                <span>Sources ({message.sources.length})</span>
+            <div className="pt-2 border-t border-white/8 space-y-1">
+              <div className="flex items-center gap-1.5 text-[10px] font-medium text-stone-500">
+                <FileCode2 className="size-3 text-moss-400" />
+                <span>{message.sources.length} source{message.sources.length === 1 ? "" : "s"} cited</span>
               </div>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-col gap-0.5">
                 {message.sources.map((s, idx) => {
                   const fileName = s.file_path.split("/").pop() || s.file_path;
                   const lineInfo =
@@ -143,17 +142,15 @@ export function ChatMessageItem({
                       key={s.citation || `${s.file_path}:${s.start_line}:${idx}`}
                       type="button"
                       onClick={() => onSelectCitation(s)}
-                      className="group flex items-center gap-1.5 rounded-lg border border-white/8 bg-zinc-900/90 px-2 py-1 text-[11px] text-zinc-300 hover:border-emerald-500/40 hover:bg-zinc-800 transition"
+                      className="group flex items-center gap-2 border-l-2 border-stone-700 hover:border-moss-500 bg-stone-900/40 hover:bg-stone-900 pl-2.5 pr-2 py-1 text-[11px] text-stone-400 transition text-left"
                       title={s.file_path}
                     >
-                      <span className="text-[10px] text-emerald-400 font-bold">
-                        #{idx + 1}
-                      </span>
-                      <span className="truncate max-w-[180px] sm:max-w-xs text-zinc-200 group-hover:text-emerald-300">
+                      <span className="text-moss-500/70 group-hover:text-moss-400 shrink-0">❯</span>
+                      <span className="truncate max-w-[220px] sm:max-w-sm text-stone-300 group-hover:text-moss-300">
                         {fileName}
                       </span>
                       {lineInfo && (
-                        <span className="text-[10px] text-zinc-500">
+                        <span className="text-stone-600 shrink-0">
                           {lineInfo}
                         </span>
                       )}
@@ -166,20 +163,20 @@ export function ChatMessageItem({
 
           {/* Subtle Telemetry Footer */}
           {message.telemetry && !message.isStreaming && (
-            <div className="pt-1 flex flex-wrap items-center gap-3 text-[10px] text-zinc-500">
-              <span className="flex items-center gap-1 text-emerald-400/90">
+            <div className="pt-1 flex flex-wrap items-center gap-3 text-[10px] text-stone-500">
+              <span className="flex items-center gap-1 text-moss-400/90">
                 <Gauge className="size-2.5" />
                 {message.telemetry.route.replace("Autonomous Agent → ", "").replace("Autonomous Engine → ", "")}
               </span>
               <span className="flex items-center gap-1">
-                <Clock className="size-2.5 text-blue-400" />
+                <Clock className="size-2.5 text-stone-400" />
                 {message.telemetry.latency}
               </span>
               <span className="flex items-center gap-1">
-                <Layers className="size-2.5 text-indigo-400" />
+                <Layers className="size-2.5 text-stone-400" />
                 {message.telemetry.chunks} chunks
               </span>
-              <span className="flex items-center gap-1 text-zinc-400">
+              <span className="flex items-center gap-1 text-stone-400">
                 <Cpu className="size-2.5 text-amber-400" />
                 {message.telemetry.model}
               </span>

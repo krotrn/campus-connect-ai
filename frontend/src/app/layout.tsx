@@ -28,7 +28,7 @@ export default function RootLayout({
       lang="en"
       className={`${jetbrainsMono.variable} dark h-full antialiased`}
     >
-      <body className="h-full w-full bg-[#09090b] font-mono text-zinc-100 overflow-hidden antialiased selection:bg-emerald-500/30 selection:text-emerald-200">
+      <body className="h-full w-full bg-[#0b0a08] font-mono text-stone-100 overflow-hidden antialiased selection:bg-moss-500/30 selection:text-moss-300">
         <Providers>{children}</Providers>
       </body>
     </html>

@@ -17,6 +17,7 @@ import { CodeModal } from "@/components/aeia/code-modal";
 import { SettingsDialog } from "@/components/aeia/settings-dialog";
 import { QuotaAlert } from "@/components/aeia/quota-alert";
 import { ErrorBanner } from "@/components/aeia/error-banner";
+import { useMediaQuery } from "@/hooks/use-media-query";
 
 const ROUTE_LABELS: Record<string, string> = {
   git_commit: "Autonomous Agent → Git Commit Audit",
@@ -30,7 +31,13 @@ function routeLabel(route: string): string {
 }
 
 export default function HomePage() {
-  const [sidebarOpen, setSidebarOpen] = React.useState(true);
+  // The sidebar is a persistent panel on desktop and an overlay drawer below
+  // it. Its open state defaults to the viewport's breakpoint and only
+  // diverges once the user explicitly toggles it, so resizing across lg
+  // doesn't fight an effect for control of the same state.
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
+  const [manualSidebarOpen, setManualSidebarOpen] = React.useState<boolean | null>(null);
+  const sidebarOpen = manualSidebarOpen ?? isDesktop;
   const [messages, setMessages] = React.useState<ChatMessage[]>([]);
   const [query, setQuery] = React.useState("");
   const [sessionId, setSessionId] = React.useState<string | null>(null);
@@ -241,11 +248,11 @@ export default function HomePage() {
   );
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#09090b] text-zinc-100 font-mono">
-      {/* ChatGPT Collapsible Sidebar */}
+    <div className="flex h-screen w-screen overflow-hidden bg-[#0b0a08] text-stone-100 font-mono">
+      {/* Collapsible sidebar: persistent panel on desktop, overlay drawer below it */}
       <ChatSidebar
         open={sidebarOpen}
-        onToggle={() => setSidebarOpen(false)}
+        onToggle={() => setManualSidebarOpen(false)}
         onNewChat={handleNewChat}
         onSelectPrompt={(p) => handleSubmit(p)}
         onOpenSettings={() => setSettingsOpen(true)}
@@ -253,46 +260,46 @@ export default function HomePage() {
       />
 
       {/* Main Chat Viewport */}
-      <div className="flex flex-1 flex-col h-full min-w-0 overflow-hidden bg-[#09090b]">
+      <div className="flex flex-1 flex-col h-full min-w-0 overflow-hidden bg-[#0b0a08]">
         {/* Top App Bar */}
-        <header className="h-12 border-b border-white/8 px-3.5 flex items-center justify-between shrink-0 bg-[#09090b]/85 backdrop-blur z-20">
-          <div className="flex items-center gap-2.5">
+        <header className="h-12 border-b border-white/8 px-3 sm:px-3.5 flex items-center justify-between shrink-0 bg-[#0b0a08]/85 backdrop-blur z-20">
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
             {!sidebarOpen && (
               <button
-                onClick={() => setSidebarOpen(true)}
-                className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-900 transition"
+                onClick={() => setManualSidebarOpen(true)}
+                className="p-1.5 -ml-1 rounded-lg text-stone-400 hover:text-white hover:bg-stone-900 transition shrink-0"
                 title="Open sidebar"
               >
                 <PanelLeft className="size-4" />
               </button>
             )}
 
-            <div className="flex items-center gap-2">
-              <div className="flex size-6 items-center justify-center rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="flex size-6 items-center justify-center rounded-md bg-moss-500/10 border border-moss-500/30 text-moss-400 font-bold shrink-0">
                 <Zap className="size-3.5" />
               </div>
-              <span className="font-semibold text-xs tracking-tight text-white font-mono">
+              <span className="font-semibold text-xs tracking-tight text-white font-mono shrink-0">
                 AEIA
               </span>
-              <span className="text-[11px] text-zinc-500 hidden sm:inline border-l border-white/8 pl-2">
-                Campus Connect (~94k LOC)
+              <span className="text-[11px] text-stone-500 hidden md:inline truncate">
+                Campus Connect · ~94k LOC
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 text-xs">
+          <div className="flex items-center gap-1.5 text-xs shrink-0">
             <button
               onClick={handleNewChat}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-zinc-300 hover:text-white hover:bg-zinc-900 transition text-xs font-mono font-medium border border-white/6"
+              className="flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-stone-300 hover:text-white hover:bg-stone-900 transition text-xs font-mono font-medium"
               title="Start new conversation"
             >
-              <Plus className="size-3.5 text-emerald-400" />
+              <Plus className="size-3.5 text-moss-400" />
               <span className="hidden sm:inline">New Chat</span>
             </button>
 
             <button
               onClick={() => setSettingsOpen(true)}
-              className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-900 transition"
+              className="p-1.5 rounded-lg text-stone-400 hover:text-white hover:bg-stone-900 transition"
               title="Settings"
             >
               <Settings className="size-4" />
@@ -301,7 +308,7 @@ export default function HomePage() {
         </header>
 
         {/* Scrollable Conversation Stream */}
-        <div className="flex-1 overflow-y-auto px-4 py-4 scroll-smooth">
+        <div className="flex-1 overflow-y-auto px-3 sm:px-4 py-4 scroll-smooth">
           <div className="max-w-3xl mx-auto w-full min-h-full flex flex-col justify-between">
             {messages.length === 0 ? (
               <EmptyConsole onSelectPrompt={(p) => handleSubmit(p)} />
@@ -338,8 +345,8 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Docked Bottom Input (ChatGPT Style) */}
-        <div className="shrink-0 bg-gradient-to-t from-[#09090b] via-[#09090b]/95 to-transparent pt-2">
+        {/* Docked Bottom Input */}
+        <div className="shrink-0 bg-gradient-to-t from-[#0b0a08] via-[#0b0a08]/95 to-transparent pt-2">
           <QueryInput
             query={query}
             onQueryChange={setQuery}

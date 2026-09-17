@@ -52,10 +52,10 @@ export function QueryInput({
   };
 
   return (
-    <div className="w-full max-w-3xl mx-auto px-4 pb-4">
+    <div className="w-full max-w-3xl mx-auto px-3 sm:px-4 pb-3 sm:pb-4">
       <form
         onSubmit={handleFormSubmit}
-        className="relative flex flex-col rounded-2xl border border-white/8 bg-[#0e0e12] shadow-2xl focus-within:border-emerald-500/60 transition-colors backdrop-blur font-mono"
+        className="relative flex flex-col rounded-2xl border border-white/8 bg-[#131110] shadow-2xl focus-within:border-moss-500/60 transition-colors backdrop-blur font-mono"
       >
         <textarea
           ref={textareaRef}
@@ -64,12 +64,12 @@ export function QueryInput({
           onKeyDown={handleKeyDown}
           disabled={disabled}
           rows={1}
-          placeholder="Ask anything about Campus Connect code, architecture, or git history..."
-          className="w-full resize-none bg-transparent px-4 pt-3.5 pb-10 text-xs sm:text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none max-h-48 min-h-[44px] font-mono leading-relaxed"
+          placeholder="Ask about Campus Connect's code, architecture, or git history..."
+          className="w-full resize-none bg-transparent px-3.5 sm:px-4 pt-3.5 pb-10 text-xs sm:text-sm text-stone-100 placeholder-stone-500 focus:outline-none max-h-48 min-h-[44px] font-mono leading-relaxed"
         />
 
         <div className="absolute right-2.5 bottom-2.5 flex items-center gap-2 font-mono">
-          <span className="hidden sm:inline text-[10px] text-zinc-500 select-none">
+          <span className="hidden sm:inline text-[10px] text-stone-500 select-none">
             {loading ? "click to stop" : "enter to send"}
           </span>
 
@@ -86,7 +86,7 @@ export function QueryInput({
             <button
               type="submit"
               disabled={!query.trim() || disabled}
-              className="flex size-7 items-center justify-center rounded-full bg-emerald-500 hover:bg-emerald-400 disabled:opacity-20 disabled:hover:bg-emerald-500 text-zinc-950 transition shadow"
+              className="flex size-7 items-center justify-center rounded-full bg-moss-500 hover:bg-moss-400 disabled:opacity-20 disabled:hover:bg-moss-500 text-stone-950 transition shadow"
               title="Send message"
             >
               <ArrowUp className="size-4 stroke-[2.5]" />
@@ -95,7 +95,7 @@ export function QueryInput({
         </div>
       </form>
 
-      <p className="mt-2 text-center text-[10px] text-zinc-500 select-none font-mono">
+      <p className="mt-2 text-center text-[10px] text-stone-500 select-none font-mono px-2">
         AEIA synthesizes grounded code intelligence across Campus Connect (~94k LOC). Responses cite verified sources.
       </p>
     </div>
