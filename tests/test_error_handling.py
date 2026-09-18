@@ -103,8 +103,14 @@ def test_google_api_503_handler(client, auth_headers):
         assert data["error"] == "LLM_SERVICE_UNAVAILABLE"
 
 
+@pytest.mark.integration
 def test_generator_graceful_degradation_on_quota():
-    """AnswerGenerator degrades gracefully by returning context chunks when 429 occurs."""
+    """AnswerGenerator degrades gracefully by returning context chunks when 429 occurs.
+
+    Without a Gemini key, AnswerGenerator() intentionally degrades to
+    client=None (see generator.py), so there's no `.client.models` to patch
+    below without a real key to construct against.
+    """
     gen = AnswerGenerator()
     sample_chunks = [
         RetrievedChunk(
@@ -126,8 +132,13 @@ def test_generator_graceful_degradation_on_quota():
         assert res.sources[0].citation == "src/middleware/auth.ts#L1-L10"
 
 
+@pytest.mark.integration
 def test_generator_raise_on_quota_option():
-    """AnswerGenerator raises LLMQuotaExceededError when configured with raise_on_quota=True."""
+    """AnswerGenerator raises LLMQuotaExceededError when configured with raise_on_quota=True.
+
+    See test_generator_graceful_degradation_on_quota: needs a real Gemini key
+    so AnswerGenerator() builds a client with `.models` to patch.
+    """
     gen = AnswerGenerator(raise_on_quota=True)
     sample_chunks = [
         RetrievedChunk(
@@ -148,8 +159,14 @@ def test_generator_raise_on_quota_option():
         assert exc_info.value.error_code == "LLM_QUOTA_EXHAUSTED"
 
 
+@pytest.mark.integration
 def test_retriever_dense_vector_db_error():
-    """Retriever raises VectorDBUnavailableError if Qdrant query fails."""
+    """Retriever raises VectorDBUnavailableError if Qdrant query fails.
+
+    Unlike the other tests here, this Retriever() isn't reused from the app's
+    `services` dict, so its __init__ hits real Qdrant (reload_bm25) before the
+    patch below ever applies.
+    """
     retriever = Retriever()
     with patch.object(
         retriever.client, "query_points", side_effect=Exception("Connection refused")

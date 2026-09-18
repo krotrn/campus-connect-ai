@@ -13,10 +13,11 @@ SCAN_IGNORE_DIRS = {"node_modules", ".next", ".git", "dist", "build", "coverage"
 CODE_EXTENSIONS = {".ts", ".tsx", ".js", ".jsx", ".mjs"}
 
 
-def _get_corpus_dir() -> Path:
+def _get_corpus_dir() -> Path | None:
     corpus_path = settings.corpus_path
     if not corpus_path.exists():
-        raise FileNotFoundError(f"Corpus directory not found at {corpus_path}")
+        logger.warning("Corpus directory not found at %s", corpus_path)
+        return None
     return corpus_path
 
 
@@ -26,6 +27,8 @@ def get_git_commit_history(max_count: int = 5, path: str | None = None) -> str:
     Safe, read-only git command.
     """
     corpus_dir = _get_corpus_dir()
+    if corpus_dir is None:
+        return "Git history is unavailable: corpus directory is not mounted."
     max_count = max(1, min(max_count, 30))
 
     cmd = [
@@ -69,6 +72,8 @@ def get_commit_details(commit_hash: str) -> str:
         return f"Invalid commit hash: '{commit_hash}'. Must be a 4-40 character hexadecimal string."
 
     corpus_dir = _get_corpus_dir()
+    if corpus_dir is None:
+        return "Commit details are unavailable: corpus directory is not mounted."
     cmd = ["git", "show", "--stat", "--oneline", clean_hash]
 
     try:
@@ -95,6 +100,8 @@ def find_file_dependents(module_name: str, max_results: int = 20) -> list[str]:
     Searches for import / require statements across TypeScript and JavaScript files.
     """
     corpus_dir = _get_corpus_dir()
+    if corpus_dir is None:
+        return []
 
     # Clean target name for matching
     clean_target = module_name.strip().strip("'\"")

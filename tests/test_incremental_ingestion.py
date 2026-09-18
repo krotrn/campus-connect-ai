@@ -200,8 +200,15 @@ def test_webhook_ignores_non_main_branch(client):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+@pytest.mark.integration
 def test_bm25_reload_thread_safety():
-    """Concurrent reload_bm25 + retrieve calls do not raise exceptions."""
+    """Concurrent reload_bm25 + retrieve calls do not raise exceptions.
+
+    Doesn't use the `client` fixture, so `services["retriever"]` is only
+    populated if an earlier test's app lifespan happened to leave it behind;
+    the fallback Retriever() otherwise hits real Qdrant, so this needs live
+    infra rather than relying on incidental test-order state.
+    """
     retriever = services.get("retriever")
     if not retriever:
         retriever = Retriever()

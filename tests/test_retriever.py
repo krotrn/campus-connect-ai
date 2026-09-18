@@ -2,6 +2,10 @@ import pytest
 
 from src.retrieval.retriever import Retriever
 
+# Retriever() always performs a live Qdrant scroll in __init__ (reload_bm25),
+# before any per-test mocking can intercept it - these need real infra.
+pytestmark = pytest.mark.integration
+
 
 @pytest.fixture
 def retriever():

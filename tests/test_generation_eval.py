@@ -31,8 +31,14 @@ def mock_chunks():
     ]
 
 
+@pytest.mark.integration
 def test_judge_faithful_evaluation(mock_chunks):
-    """When judge confirms all claims are supported, Faithfulness is 1.0."""
+    """When judge confirms all claims are supported, Faithfulness is 1.0.
+
+    RAGTriadJudge() builds a real genai.Client unconditionally (no
+    has_gemini_key guard like AnswerGenerator), so it needs a Gemini key just
+    to construct even though the LLM call itself is mocked below.
+    """
     judge = RAGTriadJudge()
 
     mock_llm_response = MagicMock()
@@ -63,8 +69,13 @@ def test_judge_faithful_evaluation(mock_chunks):
     assert len(result["unsupported_claims"]) == 0
 
 
+@pytest.mark.integration
 def test_judge_hallucination_detection(mock_chunks):
-    """When an unsupported claim is introduced, Faithfulness drops and unsupported claim is flagged."""
+    """When an unsupported claim is introduced, Faithfulness drops and unsupported claim is flagged.
+
+    See test_judge_faithful_evaluation: RAGTriadJudge() needs a real Gemini
+    key just to construct its client.
+    """
     judge = RAGTriadJudge()
 
     mock_llm_response = MagicMock()
