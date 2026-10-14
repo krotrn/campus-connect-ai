@@ -70,7 +70,7 @@ def evaluate_retrieval(dataset_path: Path = Path("evals/dataset.json")):
 
     recall_5 = (hits_at_5 / total) * 100
     recall_10 = (hits_at_10 / total) * 100
-    mrr = (sum(reciprocal_ranks) / total)
+    mrr = sum(reciprocal_ranks) / total
     avg_latency = sum(latencies) / len(latencies)
 
     print(f"\n{'=' * 60}")
@@ -108,4 +108,3 @@ if __name__ == "__main__":
         from evals.generation_eval import run_generation_evaluation
 
         run_generation_evaluation(limit=args.limit)
-

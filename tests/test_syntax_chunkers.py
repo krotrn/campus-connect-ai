@@ -224,4 +224,3 @@ def test_code_aware_chunker_integration(tmp_path):
     yaml_chunks = chunker.chunk_file(yaml_file, "compose.yml")
     assert len(yaml_chunks) >= 1
     assert yaml_chunks[0].file_type == "config"
-

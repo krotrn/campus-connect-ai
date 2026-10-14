@@ -212,13 +212,11 @@ class Retriever:
             rrf_scores[key] = rrf_scores.get(key, 0.0) + DENSE_WEIGHT / (RRF_K + rank)
             chunk_map[key] = chunk
 
-
         for rank, chunk in enumerate(sparse, start=1):
             key = (chunk.file_path, chunk.start_line)
             rrf_scores[key] = rrf_scores.get(key, 0.0) + SPARSE_WEIGHT / (RRF_K + rank)
             if key not in chunk_map:
                 chunk_map[key] = chunk
-
 
         sorted_keys = sorted(rrf_scores, key=lambda k: rrf_scores[k], reverse=True)
 
@@ -234,14 +232,11 @@ class Retriever:
             for k in sorted_keys
         ]
 
-
     # ─────────────────────────────────────────────────────────────────────────
     # Cross-encoder reranking
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _rerank(
-        self, query: str, candidates: list[RetrievedChunk], top_k: int
-    ) -> list[RetrievedChunk]:
+    def _rerank(self, query: str, candidates: list[RetrievedChunk], top_k: int) -> list[RetrievedChunk]:
         passages = [{"id": i, "text": c.content} for i, c in enumerate(candidates)]
         request = RerankRequest(query=query, passages=passages)
         results = self._ranker.rerank(request)
@@ -290,13 +285,13 @@ class Retriever:
     def _tokenize(text: str) -> list[str]:
         """Code-aware tokenizer: splits camelCase, snake_case, dots, slashes."""
         # Split on non-alphanumeric first
-        tokens = re.split(r'[^a-zA-Z0-9]+', text)
+        tokens = re.split(r"[^a-zA-Z0-9]+", text)
         expanded = []
         for token in tokens:
             if not token:
                 continue
             # Split camelCase: getUserProfile → get, User, Profile
-            parts = re.sub(r'([a-z])([A-Z])', r'\1 \2', token).split()
+            parts = re.sub(r"([a-z])([A-Z])", r"\1 \2", token).split()
             for part in parts:
                 normalized = part.lower()
                 if not normalized:
@@ -312,20 +307,17 @@ class Retriever:
         return expanded
 
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # CLI smoke-test:  uv run python -m src.retrieval.retriever "your query"
 # ─────────────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    test_query = (
-        sys.argv[1] if len(sys.argv) > 1 else "Where is authentication implemented?"
-    )
+    test_query = sys.argv[1] if len(sys.argv) > 1 else "Where is authentication implemented?"
     print(f"\nSearching for: {test_query}\n")
     retriever = Retriever(rerank=True)
 
     chunks = retriever.retrieve(test_query, top_k=5)
 
     for i, c in enumerate(chunks):
-        print(f"[{i+1}] Score: {c.score:.4f} | Citation: {c.citation}")
+        print(f"[{i + 1}] Score: {c.score:.4f} | Citation: {c.citation}")
         print(f"    Type: {c.file_type}")
         print(f"    Snippet: {c.content.strip()[:120]}...\n")

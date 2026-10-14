@@ -34,4 +34,3 @@ def test_retriever_respects_custom_top_k(retriever):
 
     assert len(results_1) == 1
     assert len(results_5) == 5
-

@@ -34,4 +34,3 @@ def test_find_file_dependents():
     # Every dependent path should be a relative path
     for d in dependents:
         assert not d.startswith("/")
-

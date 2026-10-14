@@ -168,9 +168,7 @@ def test_retriever_dense_vector_db_error():
     patch below ever applies.
     """
     retriever = Retriever()
-    with patch.object(
-        retriever.client, "query_points", side_effect=Exception("Connection refused")
-    ):
+    with patch.object(retriever.client, "query_points", side_effect=Exception("Connection refused")):
         with pytest.raises(VectorDBUnavailableError) as exc_info:
             retriever._retrieve_dense("test query", top_k=3)
         assert "Connection refused" in exc_info.value.message
@@ -258,6 +256,3 @@ def test_ask_endpoint_forwards_custom_gemini_api_key(client, auth_headers):
         )
         assert res.status_code == 200
         assert mock_traced_ask.call_args[1].get("api_key") == "custom-key-body-abc"
-
-
-

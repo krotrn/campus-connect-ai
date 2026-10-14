@@ -61,4 +61,3 @@ async def test_mcp_call_module_dependents():
     text_content = result.content[0].text
     assert "redis" in text_content
     assert "-" in text_content
-

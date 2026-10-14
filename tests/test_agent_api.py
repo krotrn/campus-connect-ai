@@ -82,4 +82,3 @@ def test_ask_endpoint_with_use_agent_flag(client, auth_headers):
     data = response.json()
     assert "6e19f61" in data["answer"]
     assert len(data["sources"]) > 0
-

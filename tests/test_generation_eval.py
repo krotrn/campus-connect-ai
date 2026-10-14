@@ -42,18 +42,20 @@ def test_judge_faithful_evaluation(mock_chunks):
     judge = RAGTriadJudge()
 
     mock_llm_response = MagicMock()
-    mock_llm_response.text = json.dumps({
-        "claims": [
-            {"statement": "Login is in src/auth/login.ts", "supported": True, "evidence": "Chunk 1"},
-            {"statement": "Auth config is in src/config/auth.ts", "supported": True, "evidence": "Chunk 2"},
-        ],
-        "faithfulness_score": 1.0,
-        "faithfulness_reason": "All claims directly present in context",
-        "answer_relevance_score": 0.95,
-        "answer_relevance_reason": "Directly answers the authentication question",
-        "useful_chunk_indices": [1, 2],
-        "context_precision_score": 1.0,
-    })
+    mock_llm_response.text = json.dumps(
+        {
+            "claims": [
+                {"statement": "Login is in src/auth/login.ts", "supported": True, "evidence": "Chunk 1"},
+                {"statement": "Auth config is in src/config/auth.ts", "supported": True, "evidence": "Chunk 2"},
+            ],
+            "faithfulness_score": 1.0,
+            "faithfulness_reason": "All claims directly present in context",
+            "answer_relevance_score": 0.95,
+            "answer_relevance_reason": "Directly answers the authentication question",
+            "useful_chunk_indices": [1, 2],
+            "context_precision_score": 1.0,
+        }
+    )
 
     with patch.object(judge.client.models, "generate_content", return_value=mock_llm_response):
         result = judge.evaluate(
@@ -79,18 +81,20 @@ def test_judge_hallucination_detection(mock_chunks):
     judge = RAGTriadJudge()
 
     mock_llm_response = MagicMock()
-    mock_llm_response.text = json.dumps({
-        "claims": [
-            {"statement": "Login is in src/auth/login.ts", "supported": True, "evidence": "Chunk 1"},
-            {"statement": "Uses OAuth2 with Google and GitHub", "supported": False, "evidence": "Not in context"},
-        ],
-        "faithfulness_score": 0.5,
-        "faithfulness_reason": "OAuth claim is unsubstantiated by context",
-        "answer_relevance_score": 0.8,
-        "answer_relevance_reason": "Answers the question but hallucinated providers",
-        "useful_chunk_indices": [1],
-        "context_precision_score": 0.5,
-    })
+    mock_llm_response.text = json.dumps(
+        {
+            "claims": [
+                {"statement": "Login is in src/auth/login.ts", "supported": True, "evidence": "Chunk 1"},
+                {"statement": "Uses OAuth2 with Google and GitHub", "supported": False, "evidence": "Not in context"},
+            ],
+            "faithfulness_score": 0.5,
+            "faithfulness_reason": "OAuth claim is unsubstantiated by context",
+            "answer_relevance_score": 0.8,
+            "answer_relevance_reason": "Answers the question but hallucinated providers",
+            "useful_chunk_indices": [1],
+            "context_precision_score": 0.5,
+        }
+    )
 
     with patch.object(judge.client.models, "generate_content", return_value=mock_llm_response):
         result = judge.evaluate(
@@ -111,21 +115,24 @@ def test_run_generation_evaluation_end_to_end(tmp_path, mock_chunks):
     output_file = tmp_path / "benchmark_out.json"
 
     dataset_file.write_text(
-        json.dumps([
-            {
-                "id": "t001",
-                "category": "auth",
-                "question": "Where is login?",
-                "expected_sources": ["src/auth/login.ts"],
-                "expected_answer_summary": "Login in src/auth/login.ts",
-            }
-        ])
+        json.dumps(
+            [
+                {
+                    "id": "t001",
+                    "category": "auth",
+                    "question": "Where is login?",
+                    "expected_sources": ["src/auth/login.ts"],
+                    "expected_answer_summary": "Login in src/auth/login.ts",
+                }
+            ]
+        )
     )
 
-    with patch("evals.generation_eval.Retriever") as MockRetriever, \
-         patch("evals.generation_eval.AnswerGenerator") as MockGenerator, \
-         patch("evals.generation_eval.RAGTriadJudge") as MockJudge:
-
+    with (
+        patch("evals.generation_eval.Retriever") as MockRetriever,
+        patch("evals.generation_eval.AnswerGenerator") as MockGenerator,
+        patch("evals.generation_eval.RAGTriadJudge") as MockJudge,
+    ):
         mock_ret_instance = MockRetriever.return_value
         mock_ret_instance.retrieve.return_value = mock_chunks
 
@@ -153,4 +160,3 @@ def test_run_generation_evaluation_end_to_end(tmp_path, mock_chunks):
     assert report["overall_metrics"]["answer_relevance"] == 0.95
     assert report["overall_metrics"]["context_precision"] == 0.8
     assert output_file.exists()
-

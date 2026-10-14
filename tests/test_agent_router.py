@@ -21,4 +21,3 @@ def test_router_file_dependents():
 def test_router_direct_rag():
     route, reason, target = route_query("Where is user authentication implemented?")
     assert route == "direct_rag"
-

@@ -49,9 +49,7 @@ def test_ask_requires_api_key(client):
 def test_ask_rejects_wrong_api_key(client):
     """Requests with an invalid API key should get 401."""
     payload = {"question": "Where is auth implemented?", "top_k": 3}
-    response = client.post(
-        "/ask", json=payload, headers={"X-API-Key": "wrong-key"}
-    )
+    response = client.post("/ask", json=payload, headers={"X-API-Key": "wrong-key"})
     assert response.status_code == 401
 
 

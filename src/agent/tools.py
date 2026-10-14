@@ -35,7 +35,7 @@ def get_git_commit_history(max_count: int = 5, path: str | None = None) -> str:
         "git",
         "log",
         f"-n{max_count}",
-        '--pretty=format:%h - %an, %ar : %s',
+        "--pretty=format:%h - %an, %ar : %s",
     ]
 
     if path:
@@ -136,4 +136,3 @@ def find_file_dependents(module_name: str, max_results: int = 20) -> list[str]:
                     return dependents
 
     return dependents
-

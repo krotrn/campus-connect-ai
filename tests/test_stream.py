@@ -61,4 +61,3 @@ def test_ask_with_stream_flag(client, auth_headers):
     response = client.post("/ask", json=payload, headers=auth_headers)
     assert response.status_code == 200
     assert "text/event-stream" in response.headers.get("content-type", "")
-

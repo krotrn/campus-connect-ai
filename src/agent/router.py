@@ -131,4 +131,3 @@ def route_query(question: str, api_key: str | None = None) -> tuple[str, str, st
         return fast_result
 
     return classify_route_llm(question, api_key=api_key)
-

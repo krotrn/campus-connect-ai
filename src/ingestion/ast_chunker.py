@@ -24,7 +24,7 @@ class _Span:
 class AstChunk:
     content: str
     start_line: int  # 1-indexed
-    end_line: int    # 1-indexed
+    end_line: int  # 1-indexed
     node_type: str
     symbol_name: str
 
@@ -137,9 +137,7 @@ class TreeSitterCodeParser:
                 if node_chars >= min_chunk_chars:
                     flush_pending()
                     start_byte = leading_comments[0].start_byte if leading_comments else child.start_byte
-                    chunk_text = (
-                        source_bytes[start_byte : child.end_byte].decode("utf-8", errors="ignore").strip()
-                    )
+                    chunk_text = source_bytes[start_byte : child.end_byte].decode("utf-8", errors="ignore").strip()
                     chunks.append(
                         AstChunk(
                             content=chunk_text,

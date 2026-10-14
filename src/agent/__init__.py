@@ -15,4 +15,3 @@ __all__ = [
     "get_commit_details",
     "find_file_dependents",
 ]
-

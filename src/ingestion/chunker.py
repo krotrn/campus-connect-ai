@@ -241,7 +241,7 @@ class CodeAwareChunker:
             # Strip the prefix from the chunk text before searching in original file
             search_text = text
             if prefix and text.startswith(prefix):
-                search_text = text[len(prefix):]
+                search_text = text[len(prefix) :]
             start_l, end_l, search_pos = self._find_line_number(full_text, search_text, search_pos)
             chunks.append(
                 CodeChunk(

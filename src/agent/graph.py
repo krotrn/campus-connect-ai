@@ -117,9 +117,7 @@ def create_agent_graph(retriever: Retriever, generator: AnswerGenerator):
 
         dependents = find_file_dependents(target)
         if dependents:
-            output = f"The following files import or depend on '{target}':\n" + "\n".join(
-                f"- {f}" for f in dependents
-            )
+            output = f"The following files import or depend on '{target}':\n" + "\n".join(f"- {f}" for f in dependents)
         else:
             output = f"No direct source files were found importing '{target}' in the codebase."
 
@@ -144,13 +142,8 @@ def create_agent_graph(retriever: Retriever, generator: AnswerGenerator):
                 route=state.get("route", ""),
                 api_key=state.get("gemini_api_key"),
             )
-            answer = (
-                f"**Route Selected**: `{state.get('route')}` ({state.get('route_reasoning')})\n\n"
-                f"{synthesized}"
-            )
-            source_file = (
-                "git-repository-history" if "git" in state.get("route", "") else "module-dependency-graph"
-            )
+            answer = f"**Route Selected**: `{state.get('route')}` ({state.get('route_reasoning')})\n\n{synthesized}"
+            source_file = "git-repository-history" if "git" in state.get("route", "") else "module-dependency-graph"
             sources = [
                 {
                     "file_path": source_file,
@@ -228,4 +221,3 @@ def create_agent_graph(retriever: Retriever, generator: AnswerGenerator):
     workflow.add_edge("synthesizer", END)
 
     return workflow.compile()
-

@@ -43,9 +43,9 @@ def test_git_pull_returns_changed_files():
         # Sequence: rev-parse HEAD (before), git pull, rev-parse HEAD (after), git diff
         mock_git.side_effect = [
             MagicMock(returncode=0, stdout=f"{before_sha}\n"),  # HEAD before
-            MagicMock(returncode=0, stdout="Updating...\n"),     # git pull
-            MagicMock(returncode=0, stdout=f"{after_sha}\n"),   # HEAD after
-            MagicMock(returncode=0, stdout=diff_output),         # git diff
+            MagicMock(returncode=0, stdout="Updating...\n"),  # git pull
+            MagicMock(returncode=0, stdout=f"{after_sha}\n"),  # HEAD after
+            MagicMock(returncode=0, stdout=diff_output),  # git diff
         ]
         result = pull_corpus(settings.corpus_path, branch="main")
 
@@ -149,10 +149,11 @@ def test_webhook_accepts_valid_push(client):
     body = json.dumps(payload).encode()
     sig = _make_signature(body)
 
-    with patch.object(settings, "github_webhook_secret", WEBHOOK_SECRET), \
-         patch("src.ingestion.git_sync.pull_corpus") as mock_pull, \
-         patch("src.api.tasks.trigger_incremental_ingestion") as mock_ingest:
-
+    with (
+        patch.object(settings, "github_webhook_secret", WEBHOOK_SECRET),
+        patch("src.ingestion.git_sync.pull_corpus") as mock_pull,
+        patch("src.api.tasks.trigger_incremental_ingestion") as mock_ingest,
+    ):
         mock_pull.return_value = GitPullResult(
             before_sha="aaa",
             after_sha="bbb",

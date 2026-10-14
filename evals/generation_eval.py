@@ -99,8 +99,7 @@ class RAGTriadJudge:
     ) -> Dict[str, Any]:
         """Judge a single question-generation pair against retrieved context."""
         context_str = "\n\n".join(
-            f"[Chunk {i+1}] ({c.citation}):\n{c.content}"
-            for i, c in enumerate(retrieved_chunks)
+            f"[Chunk {i + 1}] ({c.citation}):\n{c.content}" for i, c in enumerate(retrieved_chunks)
         )
 
         user_prompt = f"""[User Question]
@@ -242,7 +241,7 @@ def run_generation_evaluation(
         status_flag = "✅" if faith >= 0.9 and relevance >= 0.85 else "⚠️"
         print(
             f"{status_flag} [{idx:02d}/{len(data):02d}] {qid} ({cat:<22}) | "
-            f"Faith: {faith*100:5.1f}% | Rel: {relevance*100:5.1f}% | Prec: {precision*100:5.1f}%"
+            f"Faith: {faith * 100:5.1f}% | Rel: {relevance * 100:5.1f}% | Prec: {precision * 100:5.1f}%"
         )
 
     # Calculate overall aggregates

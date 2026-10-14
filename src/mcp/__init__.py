@@ -11,4 +11,3 @@ __all__ = [
     "get_streamable_http_app",
     "ALLOWED_MCP_TOOLS",
 ]
-

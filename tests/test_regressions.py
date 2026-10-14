@@ -65,14 +65,16 @@ def test_agent_reuses_preresolved_route():
     graph = create_agent_graph(FakeRetriever(), FakeGenerator())
 
     with patch("src.agent.graph.route_query") as route_query:
-        state = graph.invoke({
-            "question": "Which files changed in commit abc1234?",
-            "top_k": 3,
-            "route": "git_commit",
-            "route_reasoning": "pre-resolved by the API layer",
-            "target": "abc1234",
-            "steps_taken": ["received_query"],
-        })
+        state = graph.invoke(
+            {
+                "question": "Which files changed in commit abc1234?",
+                "top_k": 3,
+                "route": "git_commit",
+                "route_reasoning": "pre-resolved by the API layer",
+                "target": "abc1234",
+                "steps_taken": ["received_query"],
+            }
+        )
 
     route_query.assert_not_called()
     assert state["route"] == "git_commit"
@@ -84,11 +86,13 @@ def test_agent_routes_itself_when_no_route_supplied():
     from tests.conftest import FakeGenerator, FakeRetriever
 
     graph = create_agent_graph(FakeRetriever(), FakeGenerator())
-    state = graph.invoke({
-        "question": "Show me the diff for commit abc1234",
-        "top_k": 3,
-        "steps_taken": ["received_query"],
-    })
+    state = graph.invoke(
+        {
+            "question": "Show me the diff for commit abc1234",
+            "top_k": 3,
+            "steps_taken": ["received_query"],
+        }
+    )
 
     assert state["route"] == "git_commit"
     assert any(step.startswith("routed_to") for step in state["steps_taken"])
@@ -105,12 +109,14 @@ def test_tool_output_is_synthesized_by_the_generator():
     graph = create_agent_graph(FakeRetriever(), generator)
 
     with patch("src.agent.graph.get_git_commit_history", return_value="abc1234 - dev, 2h ago : fix auth"):
-        state = graph.invoke({
-            "question": "What are the recent commits?",
-            "route": "git_history",
-            "route_reasoning": "explicit history request",
-            "steps_taken": [],
-        })
+        state = graph.invoke(
+            {
+                "question": "What are the recent commits?",
+                "route": "git_history",
+                "route_reasoning": "explicit history request",
+                "steps_taken": [],
+            }
+        )
 
     # FakeGenerator.generate_from_tool_output prefixes with "Summary for <route>"
     assert "Summary for git_history" in state["answer"]
@@ -175,9 +181,7 @@ def test_stream_surfaces_domain_errors(client, auth_headers):
     from src.api.main import services
     from src.errors import VectorDBUnavailableError
 
-    with patch.object(
-        services["retriever"], "retrieve", side_effect=VectorDBUnavailableError()
-    ):
+    with patch.object(services["retriever"], "retrieve", side_effect=VectorDBUnavailableError()):
         response = client.post(
             "/ask/stream",
             json={"question": "Where is auth implemented?"},
@@ -231,9 +235,7 @@ def test_tracing_failure_falls_back_to_untraced(fake_chunks):
             raise AttributeError("'Langfuse' object has no attribute 'trace'")
 
     with patch.object(observability, "_langfuse", BrokenLangfuse()):
-        result = observability.traced_ask(
-            "Where is auth?", 3, FakeRetriever(), FakeGenerator()
-        )
+        result = observability.traced_ask("Where is auth?", 3, FakeRetriever(), FakeGenerator())
 
     assert result["answer"] == FAKE_ANSWER
     assert result["trace_id"] is None
@@ -306,9 +308,7 @@ def test_non_retryable_error_stops_model_fallback(fake_chunks):
     class FakeModels:
         def generate_content(self, **kwargs):
             attempts.append(kwargs["model"])
-            raise ClientError(
-                400, {"error": {"message": "API key not valid", "code": 400}}, None
-            )
+            raise ClientError(400, {"error": {"message": "API key not valid", "code": 400}}, None)
 
     class FakeClient:
         models = FakeModels()

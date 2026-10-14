@@ -75,4 +75,3 @@ def test_chunk_empty_file(chunker):
         assert chunks == []
     finally:
         tmp_path.unlink(missing_ok=True)
-

@@ -78,4 +78,3 @@ def test_mcp_stateless_call_tool(client):
     assert "content" in result
     text = result["content"][0]["text"]
     assert " - " in text
-

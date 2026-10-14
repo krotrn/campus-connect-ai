@@ -204,12 +204,8 @@ def fake_chunks():
 
 
 def pytest_configure(config):
-    config.addinivalue_line(
-        "markers", "integration: requires a live Qdrant and Gemini API key"
-    )
-    config.addinivalue_line(
-        "markers", "real_router: exercise the real LLM router instead of the test stub"
-    )
+    config.addinivalue_line("markers", "integration: requires a live Qdrant and Gemini API key")
+    config.addinivalue_line("markers", "real_router: exercise the real LLM router instead of the test stub")
 
 
 def pytest_collection_modifyitems(config, items):

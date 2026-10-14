@@ -324,11 +324,7 @@ def health_check():
 # ─────────────────────────────────────────────────────────────────────────────
 def _resolve_gemini_key(request: Request, body_key: str | None) -> str | None:
     """Client-supplied Gemini key from the body or the X-Gemini-API-Key header."""
-    return (
-        (body_key or "").strip()
-        or request.headers.get("x-gemini-api-key", "").strip()
-        or None
-    )
+    return (body_key or "").strip() or request.headers.get("x-gemini-api-key", "").strip() or None
 
 
 def _build_rewriter_client(
@@ -363,40 +359,46 @@ def _stream_ask_response(
     def event_generator():
         try:
             if use_agent:
-                final_state = agent.invoke({
-                    "question": search_query,
-                    "top_k": body.top_k,
-                    "route": route,
-                    "route_reasoning": reasoning,
-                    "target": target,
-                    "steps_taken": ["received_query"],
-                    "gemini_api_key": gemini_api_key,
-                })
+                final_state = agent.invoke(
+                    {
+                        "question": search_query,
+                        "top_k": body.top_k,
+                        "route": route,
+                        "route_reasoning": reasoning,
+                        "target": target,
+                        "steps_taken": ["received_query"],
+                        "gemini_api_key": gemini_api_key,
+                    }
+                )
                 latency_ms = round((time.time() - start_time) * 1000, 2)
                 answer_text = final_state.get("answer", "")
                 sources = final_state.get("sources", [])
 
-                yield _sse({
-                    "type": "sources",
-                    "sources": sources,
-                    "session_id": session_id,
-                    "rewritten_question": search_query if search_query != body.question else None,
-                    "route": route,
-                    "route_reasoning": reasoning,
-                })
+                yield _sse(
+                    {
+                        "type": "sources",
+                        "sources": sources,
+                        "session_id": session_id,
+                        "rewritten_question": search_query if search_query != body.question else None,
+                        "route": route,
+                        "route_reasoning": reasoning,
+                    }
+                )
 
                 for line in answer_text.splitlines(keepends=True):
                     yield _sse({"type": "token", "text": line})
 
                 session_mem.add_turn(body.question, answer_text)
-                yield _sse({
-                    "type": "done",
-                    "latency_ms": latency_ms,
-                    "session_id": session_id,
-                    "route": route,
-                    "route_reasoning": reasoning,
-                    "model": settings.gemini_model if gemini_api_key or settings.has_gemini_key else None,
-                })
+                yield _sse(
+                    {
+                        "type": "done",
+                        "latency_ms": latency_ms,
+                        "session_id": session_id,
+                        "route": route,
+                        "route_reasoning": reasoning,
+                        "model": settings.gemini_model if gemini_api_key or settings.has_gemini_key else None,
+                    }
+                )
             else:
                 chunks = retriever.retrieve(search_query, top_k=body.top_k)
                 full_answer = []
@@ -407,28 +409,32 @@ def _stream_ask_response(
                     api_key=gemini_api_key,
                 ):
                     if event["type"] == "sources":
-                        yield _sse({
-                            "type": "sources",
-                            "sources": event["sources"],
-                            "session_id": session_id,
-                            "rewritten_question": search_query if search_query != body.question else None,
-                            "route": "direct_rag",
-                            "route_reasoning": reasoning,
-                        })
+                        yield _sse(
+                            {
+                                "type": "sources",
+                                "sources": event["sources"],
+                                "session_id": session_id,
+                                "rewritten_question": search_query if search_query != body.question else None,
+                                "route": "direct_rag",
+                                "route_reasoning": reasoning,
+                            }
+                        )
                     elif event["type"] == "token":
                         full_answer.append(event["text"])
                         yield _sse({"type": "token", "text": event["text"]})
                     elif event["type"] == "done":
                         latency_ms = round((time.time() - start_time) * 1000, 2)
                         session_mem.add_turn(body.question, "".join(full_answer))
-                        yield _sse({
-                            "type": "done",
-                            "latency_ms": latency_ms,
-                            "session_id": session_id,
-                            "route": "direct_rag",
-                            "route_reasoning": reasoning,
-                            "model": event.get("model"),
-                        })
+                        yield _sse(
+                            {
+                                "type": "done",
+                                "latency_ms": latency_ms,
+                                "session_id": session_id,
+                                "route": "direct_rag",
+                                "route_reasoning": reasoning,
+                                "model": event.get("model"),
+                            }
+                        )
         except AEIAError as e:
             logger.error("Stream failed: %s", e, exc_info=True)
             yield _sse({"type": "error", "error": e.message, "code": e.error_code})
@@ -436,11 +442,13 @@ def _stream_ask_response(
             # Never leak raw exception text (which can carry internal hosts and
             # credentials) to the browser; the detail goes to the server log.
             logger.exception("Unhandled error while streaming answer")
-            yield _sse({
-                "type": "error",
-                "error": "An internal error occurred while generating the answer.",
-                "code": "INTERNAL_ERROR",
-            })
+            yield _sse(
+                {
+                    "type": "error",
+                    "error": "An internal error occurred while generating the answer.",
+                    "code": "INTERNAL_ERROR",
+                }
+            )
 
     return StreamingResponse(
         event_generator(),
@@ -504,15 +512,17 @@ def _ask_impl(request: Request, body: AskRequest):
 
     try:
         if agent and (route != "direct_rag" or body.use_agent):
-            final_state = agent.invoke({
-                "question": search_query,
-                "top_k": body.top_k,
-                "route": route,
-                "route_reasoning": reasoning,
-                "target": target,
-                "steps_taken": ["received_query"],
-                "gemini_api_key": effective_gemini_key,
-            })
+            final_state = agent.invoke(
+                {
+                    "question": search_query,
+                    "top_k": body.top_k,
+                    "route": route,
+                    "route_reasoning": reasoning,
+                    "target": target,
+                    "steps_taken": ["received_query"],
+                    "gemini_api_key": effective_gemini_key,
+                }
+            )
             citations = [
                 SourceCitation(
                     file_path=s.get("file_path", "unknown"),
@@ -629,12 +639,14 @@ def agent_ask(request: Request, body: AgentAskRequest):
     )
 
     try:
-        final_state = agent.invoke({
-            "question": search_query,
-            "top_k": body.top_k,
-            "steps_taken": ["received_query"],
-            "gemini_api_key": effective_gemini_key,
-        })
+        final_state = agent.invoke(
+            {
+                "question": search_query,
+                "top_k": body.top_k,
+                "steps_taken": ["received_query"],
+                "gemini_api_key": effective_gemini_key,
+            }
+        )
         latency_ms = round((time.time() - start_time) * 1000, 2)
         answer_text = final_state.get("answer", "")
         session_mem.add_turn(body.question, answer_text)

@@ -128,10 +128,7 @@ class AnswerGenerator:
     def _build_context_block(self, chunks: list[RetrievedChunk]) -> str:
         parts = []
         for i, chunk in enumerate(chunks):
-            parts.append(
-                f"--- CHUNK {i+1}: [{chunk.citation}] (Type: {chunk.file_type}) ---\n"
-                f"{chunk.content}\n"
-            )
+            parts.append(f"--- CHUNK {i + 1}: [{chunk.citation}] (Type: {chunk.file_type}) ---\n{chunk.content}\n")
         return "\n".join(parts)
 
     @staticmethod
@@ -395,11 +392,7 @@ if __name__ == "__main__":
 
     configure_logging()
 
-    query = (
-        sys.argv[1]
-        if len(sys.argv) > 1
-        else "What database models are defined in this project?"
-    )
+    query = sys.argv[1] if len(sys.argv) > 1 else "What database models are defined in this project?"
     print(f"\n❓ Question: {query}\n")
 
     retriever = Retriever()

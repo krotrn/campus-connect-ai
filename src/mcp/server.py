@@ -16,7 +16,7 @@ from src.retrieval.retriever import Retriever
 logger = logging.getLogger(__name__)
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Explicit Permissions / Tool Allowlist (FR6.2)
+# Explicit Permissions / Tool Allowlist
 # ─────────────────────────────────────────────────────────────────────────────
 ALLOWED_MCP_TOOLS = {
     "search_campus_connect",
@@ -36,6 +36,7 @@ def _get_services():
     # Reuse singletons from FastAPI lifespan if available
     try:
         from src.api.main import services
+
         if services.get("retriever") and services.get("generator"):
             return services["retriever"], services["generator"]
     except Exception:
@@ -94,8 +95,7 @@ def create_mcp_server(allowed_tools: set[str] | None = None) -> MCPServer:
         output_parts = [f"Found {len(chunks)} relevant code chunks:"]
         for i, c in enumerate(chunks, 1):
             output_parts.append(
-                f"\n--- Chunk {i}: [{c.citation}] (Type: {c.file_type}, Score: {c.score:.4f}) ---\n"
-                f"{c.content.strip()}"
+                f"\n--- Chunk {i}: [{c.citation}] (Type: {c.file_type}, Score: {c.score:.4f}) ---\n{c.content.strip()}"
             )
         return "\n".join(output_parts)
 
@@ -122,9 +122,7 @@ def create_mcp_server(allowed_tools: set[str] | None = None) -> MCPServer:
     # ─────────────────────────────────────────────────────────────────────────
     @tool(
         "get_commit_history",
-        (
-            "Retrieve recent git commit logs from the Campus Connect repository, optionally filtered by file path."
-        ),
+        ("Retrieve recent git commit logs from the Campus Connect repository, optionally filtered by file path."),
     )
     def get_commit_history(max_count: int = 5, path: str = "") -> str:
         return get_git_commit_history(max_count=max_count, path=path if path else None)
@@ -144,9 +142,7 @@ def create_mcp_server(allowed_tools: set[str] | None = None) -> MCPServer:
     # ─────────────────────────────────────────────────────────────────────────
     @tool(
         "find_module_dependents",
-        (
-            "Scan the codebase to identify all source files (.ts, .tsx, .js) that import or depend on a given module."
-        ),
+        ("Scan the codebase to identify all source files (.ts, .tsx, .js) that import or depend on a given module."),
     )
     def find_module_dependents(module_name: str) -> str:
         dependents = find_file_dependents(module_name)
@@ -186,4 +182,3 @@ if __name__ == "__main__":
     configure_logging()
     print("Starting AEIA Model Context Protocol Server (stdio transport)...", file=sys.stderr)
     asyncio.run(mcp_server.run_stdio_async())
-

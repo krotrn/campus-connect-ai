@@ -80,9 +80,7 @@ class EmbeddingCache:
     # ── Reads ────────────────────────────────────────────────────────────────
 
     def get(self, content: str) -> list[float] | None:
-        row = self._conn.execute(
-            "SELECT vec FROM embeddings WHERE hash = ?", (content_hash(content),)
-        ).fetchone()
+        row = self._conn.execute("SELECT vec FROM embeddings WHERE hash = ?", (content_hash(content),)).fetchone()
         return np.frombuffer(row[0], dtype=np.float32).tolist() if row else None
 
     def get_many(self, hashes: list[str]) -> dict[str, list[float]]:
@@ -112,9 +110,7 @@ class EmbeddingCache:
             rows.append((h, int(vec.size), vec.tobytes()))
         if not rows:
             return
-        self._conn.executemany(
-            "INSERT OR IGNORE INTO embeddings (hash, dim, vec) VALUES (?, ?, ?)", rows
-        )
+        self._conn.executemany("INSERT OR IGNORE INTO embeddings (hash, dim, vec) VALUES (?, ?, ?)", rows)
         self._conn.commit()
 
     def save(self):

@@ -36,5 +36,3 @@ def test_root_json_for_api_clients(client):
     assert "message" in data
     assert "docs_url" in data
     assert "health_url" in data
-
-

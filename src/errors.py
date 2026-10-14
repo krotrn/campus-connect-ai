@@ -4,7 +4,6 @@ Provides clear error categorization for upstream LLM, Vector DB, and corpus issu
 """
 
 
-
 class AEIAError(Exception):
     """Base exception for all AEIA domain errors."""
 
@@ -37,7 +36,10 @@ class LLMServiceUnavailableError(AEIAError):
 class VectorDBUnavailableError(AEIAError):
     """Raised when Qdrant vector database is unreachable."""
 
-    def __init__(self, message: str = "Vector database (Qdrant) connection failed. Ensure Qdrant is running at http://localhost:6333."):
+    def __init__(
+        self,
+        message: str = "Vector database (Qdrant) connection failed. Ensure Qdrant is running at http://localhost:6333.",
+    ):
         super().__init__(message, status_code=503, error_code="VECTOR_DB_UNAVAILABLE")
 
 
@@ -46,4 +48,3 @@ class CorpusUnavailableError(AEIAError):
 
     def __init__(self, message: str = "Target codebase corpus not found or inaccessible."):
         super().__init__(message, status_code=500, error_code="CORPUS_UNAVAILABLE")
-

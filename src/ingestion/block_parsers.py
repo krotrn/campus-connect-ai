@@ -16,7 +16,7 @@ from dataclasses import dataclass
 class BlockChunk:
     content: str
     start_line: int  # 1-indexed
-    end_line: int    # 1-indexed
+    end_line: int  # 1-indexed
     block_type: str
     identifier: str
 
@@ -109,7 +109,7 @@ class YamlBlockParser:
                 current_block = [line]
                 current_start = idx
                 current_name = key
-                in_services = (key == "services")
+                in_services = key == "services"
                 continue
 
             # If inside 'services:' in a compose file, chunk by 2-space indented service definitions
@@ -255,4 +255,3 @@ class SqlStatementParser:
                 )
 
         return chunks
-

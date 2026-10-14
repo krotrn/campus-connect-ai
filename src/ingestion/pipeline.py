@@ -222,9 +222,7 @@ class IngestionPipeline:
         while True:
             records, next_offset = self.client.scroll(
                 collection_name=settings.collection_name,
-                scroll_filter=Filter(
-                    must=[FieldCondition(key="file_path", match=MatchValue(value=rel_path))]
-                ),
+                scroll_filter=Filter(must=[FieldCondition(key="file_path", match=MatchValue(value=rel_path))]),
                 limit=256,
                 offset=next_offset,
                 with_payload=False,
@@ -364,9 +362,7 @@ class IngestionPipeline:
                 all_chunks.extend(chunks)
 
         if all_chunks:
-            logger.info(
-                "Re-chunking %d chunks from %d changed files...", len(all_chunks), len(changed_files)
-            )
+            logger.info("Re-chunking %d chunks from %d changed files...", len(all_chunks), len(changed_files))
             embeddings = self._get_embeddings(all_chunks)
             self._upsert_chunks(all_chunks, embeddings)
 
@@ -374,8 +370,7 @@ class IngestionPipeline:
 
         elapsed = time.time() - start_time
         logger.info(
-            "Incremental ingestion done in %.2fs: %d files touched, %d stale points removed, "
-            "%d chunks upserted.",
+            "Incremental ingestion done in %.2fs: %d files touched, %d stale points removed, %d chunks upserted.",
             elapsed,
             len(changed_files),
             total_deleted,

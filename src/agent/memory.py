@@ -90,10 +90,7 @@ class SessionMemoryManager:
         with self._lock:
             # Evict expired sessions
             now = time.time()
-            expired = [
-                sid for sid, mem in self._sessions.items()
-                if (now - mem.last_accessed) > self.ttl_seconds
-            ]
+            expired = [sid for sid, mem in self._sessions.items() if (now - mem.last_accessed) > self.ttl_seconds]
             for sid in expired:
                 del self._sessions[sid]
 
@@ -134,7 +131,17 @@ def rewrite_query_with_history(
 
     # Quick heuristic: if query contains no pronouns or follow-up markers, leave as-is
     follow_up_markers = {
-        "it", "its", "that", "this", "these", "those", "them", "and", "what about", "how about", "show me"
+        "it",
+        "its",
+        "that",
+        "this",
+        "these",
+        "those",
+        "them",
+        "and",
+        "what about",
+        "how about",
+        "show me",
     }
     words = set(query.lower().split())
     if not (words & follow_up_markers) and len(query.split()) >= 6:
@@ -184,4 +191,3 @@ Rewritten Self-Contained Query:"""
 
     # Fallback to original query on upstream failure
     return query
-
