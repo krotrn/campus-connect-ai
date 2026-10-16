@@ -340,6 +340,40 @@ def _sse(payload: dict[str, Any]) -> str:
     return f"data: {json.dumps(payload)}\n\n"
 
 
+def _prepare_turn(request: Request, body: AskRequest | AgentAskRequest, generator: AnswerGenerator | None):
+    """Steps shared by every question endpoint: session, API key, follow-up rewrite.
+
+    Returns (session_id, session_mem, gemini_key, search_query).
+    """
+    session_id, session_mem = memory_manager.get_or_create(body.session_id)
+    gemini_key = _resolve_gemini_key(request, body.gemini_api_key)
+    search_query = rewrite_query_with_history(
+        body.question,
+        session_mem.get_history(),
+        client=_build_rewriter_client(gemini_key, generator),
+    )
+    return session_id, session_mem, gemini_key, search_query
+
+
+def _rewritten(search_query: str, body: AskRequest | AgentAskRequest) -> str | None:
+    """The rewritten question for the response, or None if rewriting changed nothing."""
+    return search_query if search_query != body.question else None
+
+
+def _run_agent(agent: Any, search_query: str, top_k: int, gemini_key: str | None, **routing: Any) -> dict:
+    """Invoke the LangGraph agent. ``routing`` (route/route_reasoning/target) is
+    passed when the API already classified the query, so the graph skips re-routing."""
+    return agent.invoke(
+        {
+            "question": search_query,
+            "top_k": top_k,
+            "steps_taken": ["received_query"],
+            "gemini_api_key": gemini_key,
+            **routing,
+        }
+    )
+
+
 def _stream_ask_response(
     body: AskRequest,
     search_query: str,
@@ -359,16 +393,14 @@ def _stream_ask_response(
     def event_generator():
         try:
             if use_agent:
-                final_state = agent.invoke(
-                    {
-                        "question": search_query,
-                        "top_k": body.top_k,
-                        "route": route,
-                        "route_reasoning": reasoning,
-                        "target": target,
-                        "steps_taken": ["received_query"],
-                        "gemini_api_key": gemini_api_key,
-                    }
+                final_state = _run_agent(
+                    agent,
+                    search_query,
+                    body.top_k,
+                    gemini_api_key,
+                    route=route,
+                    route_reasoning=reasoning,
+                    target=target,
                 )
                 latency_ms = round((time.time() - start_time) * 1000, 2)
                 answer_text = final_state.get("answer", "")
@@ -379,7 +411,7 @@ def _stream_ask_response(
                         "type": "sources",
                         "sources": sources,
                         "session_id": session_id,
-                        "rewritten_question": search_query if search_query != body.question else None,
+                        "rewritten_question": _rewritten(search_query, body),
                         "route": route,
                         "route_reasoning": reasoning,
                     }
@@ -414,7 +446,7 @@ def _stream_ask_response(
                                 "type": "sources",
                                 "sources": event["sources"],
                                 "session_id": session_id,
-                                "rewritten_question": search_query if search_query != body.question else None,
+                                "rewritten_question": _rewritten(search_query, body),
                                 "route": "direct_rag",
                                 "route_reasoning": reasoning,
                             }
@@ -478,17 +510,8 @@ def _ask_impl(request: Request, body: AskRequest):
         )
 
     start_time = time.time()
-    session_id, session_mem = memory_manager.get_or_create(body.session_id)
+    session_id, session_mem, effective_gemini_key, search_query = _prepare_turn(request, body, generator)
     history = session_mem.get_history()
-
-    effective_gemini_key = _resolve_gemini_key(request, body.gemini_api_key)
-
-    # Coreference resolution / search query expansion
-    search_query = rewrite_query_with_history(
-        body.question,
-        history,
-        client=_build_rewriter_client(effective_gemini_key, generator),
-    )
 
     # Route once, then reuse the decision for both the streaming branch and the
     # agent graph so ambiguous queries cost a single classification call.
@@ -512,16 +535,14 @@ def _ask_impl(request: Request, body: AskRequest):
 
     try:
         if agent and (route != "direct_rag" or body.use_agent):
-            final_state = agent.invoke(
-                {
-                    "question": search_query,
-                    "top_k": body.top_k,
-                    "route": route,
-                    "route_reasoning": reasoning,
-                    "target": target,
-                    "steps_taken": ["received_query"],
-                    "gemini_api_key": effective_gemini_key,
-                }
+            final_state = _run_agent(
+                agent,
+                search_query,
+                body.top_k,
+                effective_gemini_key,
+                route=route,
+                route_reasoning=reasoning,
+                target=target,
             )
             citations = [
                 SourceCitation(
@@ -543,7 +564,7 @@ def _ask_impl(request: Request, body: AskRequest):
                 sources=citations,
                 latency_ms=latency_ms,
                 session_id=session_id,
-                rewritten_question=search_query if search_query != body.question else None,
+                rewritten_question=_rewritten(search_query, body),
                 route=final_state.get("route", route),
                 route_reasoning=final_state.get("route_reasoning", reasoning),
             )
@@ -564,7 +585,7 @@ def _ask_impl(request: Request, body: AskRequest):
             sources=result["sources"],
             latency_ms=result["latency_ms"],
             session_id=session_id,
-            rewritten_question=search_query if search_query != body.question else None,
+            rewritten_question=_rewritten(search_query, body),
             route="direct_rag",
             route_reasoning=reasoning or "Direct RAG invocation",
         )
@@ -626,27 +647,10 @@ def agent_ask(request: Request, body: AgentAskRequest):
         )
 
     start_time = time.time()
-    session_id, session_mem = memory_manager.get_or_create(body.session_id)
-    history = session_mem.get_history()
-
-    effective_gemini_key = _resolve_gemini_key(request, body.gemini_api_key)
-
-    # Coreference resolution / search query expansion
-    search_query = rewrite_query_with_history(
-        body.question,
-        history,
-        client=_build_rewriter_client(effective_gemini_key, generator),
-    )
+    session_id, session_mem, effective_gemini_key, search_query = _prepare_turn(request, body, generator)
 
     try:
-        final_state = agent.invoke(
-            {
-                "question": search_query,
-                "top_k": body.top_k,
-                "steps_taken": ["received_query"],
-                "gemini_api_key": effective_gemini_key,
-            }
-        )
+        final_state = _run_agent(agent, search_query, body.top_k, effective_gemini_key)
         latency_ms = round((time.time() - start_time) * 1000, 2)
         answer_text = final_state.get("answer", "")
         session_mem.add_turn(body.question, answer_text)
@@ -660,7 +664,7 @@ def agent_ask(request: Request, body: AgentAskRequest):
             steps_taken=final_state.get("steps_taken", []),
             latency_ms=latency_ms,
             session_id=session_id,
-            rewritten_question=search_query if search_query != body.question else None,
+            rewritten_question=_rewritten(search_query, body),
         )
     except (AEIAError, APIError, HTTPException):
         raise

@@ -79,17 +79,22 @@ async def trigger_ingestion() -> bool:
     return True
 
 
-async def _run_full_in_background(loop: asyncio.AbstractEventLoop):
+async def _run_and_record(loop: asyncio.AbstractEventLoop, label: str, sync_fn, *args):
+    """Run a blocking ingest in a thread and record COMPLETED/FAILED in the shared state."""
     try:
-        result = await loop.run_in_executor(None, _sync_full_ingest)
+        result = await loop.run_in_executor(None, sync_fn, *args)
         _update_state(
             status=IngestionStatus.COMPLETED,
             chunks_ingested=result.get("chunks", 0),
             files_processed=result.get("files", 0),
         )
     except Exception as e:
-        logger.exception("Full ingestion failed")
+        logger.exception("%s ingestion failed", label)
         _update_state(status=IngestionStatus.FAILED, error=str(e))
+
+
+async def _run_full_in_background(loop: asyncio.AbstractEventLoop):
+    await _run_and_record(loop, "Full", _sync_full_ingest)
 
 
 def _sync_full_ingest() -> dict:
@@ -134,16 +139,7 @@ async def _run_incremental_in_background(
     loop: asyncio.AbstractEventLoop,
     changed_files: list[str],
 ):
-    try:
-        result = await loop.run_in_executor(None, _sync_incremental_ingest, changed_files)
-        _update_state(
-            status=IngestionStatus.COMPLETED,
-            chunks_ingested=result.get("chunks", 0),
-            files_processed=result.get("files", 0),
-        )
-    except Exception as e:
-        logger.exception("Incremental ingestion failed")
-        _update_state(status=IngestionStatus.FAILED, error=str(e))
+    await _run_and_record(loop, "Incremental", _sync_incremental_ingest, changed_files)
 
 
 def _sync_incremental_ingest(changed_files: list[str]) -> dict:

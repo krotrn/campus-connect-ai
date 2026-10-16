@@ -21,6 +21,15 @@ def _get_corpus_dir() -> Path | None:
     return corpus_path
 
 
+def _git(cmd: list[str], cwd: Path) -> str:
+    """Run a read-only git command in the corpus and return stripped stdout.
+
+    Raises CalledProcessError on a non-zero exit so each caller words its own error.
+    """
+    res = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True, timeout=10, check=True)
+    return res.stdout.strip()
+
+
 def get_git_commit_history(max_count: int = 5, path: str | None = None) -> str:
     """
     Retrieve recent git commit logs from the target corpus repository.
@@ -44,16 +53,7 @@ def get_git_commit_history(max_count: int = 5, path: str | None = None) -> str:
         cmd.extend(["--", clean_path])
 
     try:
-        res = subprocess.run(
-            cmd,
-            cwd=str(corpus_dir),
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=True,
-        )
-        output = res.stdout.strip()
-        return output if output else "No git commit history found."
+        return _git(cmd, corpus_dir) or "No git commit history found."
     except subprocess.CalledProcessError as e:
         logger.warning("git log failed: %s", e.stderr.strip())
         return f"Error executing git log: {e.stderr.strip()}"
@@ -77,15 +77,7 @@ def get_commit_details(commit_hash: str) -> str:
     cmd = ["git", "show", "--stat", "--oneline", clean_hash]
 
     try:
-        res = subprocess.run(
-            cmd,
-            cwd=str(corpus_dir),
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=True,
-        )
-        return res.stdout.strip()
+        return _git(cmd, corpus_dir)
     except subprocess.CalledProcessError as e:
         logger.warning("git show failed for %s: %s", clean_hash, e.stderr.strip())
         return f"Error showing commit {clean_hash}: {e.stderr.strip()}"

@@ -158,9 +158,9 @@ class AnswerGenerator:
         )
 
     @staticmethod
-    def _generation_config() -> types.GenerateContentConfig:
+    def _generation_config(system_prompt: str = SYSTEM_PROMPT) -> types.GenerateContentConfig:
         return types.GenerateContentConfig(
-            system_instruction=SYSTEM_PROMPT,
+            system_instruction=system_prompt,
             temperature=0.1,
             automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
         )
@@ -304,11 +304,7 @@ class AnswerGenerator:
                 response = client.models.generate_content(
                     model=model,
                     contents=prompt,
-                    config=types.GenerateContentConfig(
-                        system_instruction=TOOL_SYNTHESIS_PROMPT,
-                        temperature=0.1,
-                        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
-                    ),
+                    config=self._generation_config(TOOL_SYNTHESIS_PROMPT),
                 )
                 if response and response.text:
                     return response.text

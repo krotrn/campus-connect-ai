@@ -3,7 +3,7 @@ import logging
 import re
 import sys
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from fastembed import TextEmbedding
 from flashrank import Ranker, RerankRequest
@@ -32,6 +32,18 @@ class RetrievedChunk:
     @property
     def citation(self) -> str:
         return f"{self.file_path}#L{self.start_line}-L{self.end_line}"
+
+    @classmethod
+    def from_payload(cls, payload: dict, score: float) -> "RetrievedChunk":
+        """Build a chunk from a Qdrant payload, tolerating missing fields."""
+        return cls(
+            content=payload.get("content", ""),
+            file_path=payload.get("file_path", ""),
+            start_line=payload.get("start_line", 0),
+            end_line=payload.get("end_line", 0),
+            file_type=payload.get("file_type", ""),
+            score=score,
+        )
 
 
 class Retriever:
@@ -140,20 +152,7 @@ class Retriever:
         except Exception as e:
             raise VectorDBUnavailableError(f"Qdrant vector query failed: {str(e)}") from e
 
-        chunks = []
-        for point in results.points:
-            payload = point.payload or {}
-            chunks.append(
-                RetrievedChunk(
-                    content=payload.get("content", ""),
-                    file_path=payload.get("file_path", ""),
-                    start_line=payload.get("start_line", 0),
-                    end_line=payload.get("end_line", 0),
-                    file_type=payload.get("file_type", ""),
-                    score=point.score,
-                )
-            )
-        return chunks
+        return [RetrievedChunk.from_payload(point.payload or {}, point.score) for point in results.points]
 
     # ─────────────────────────────────────────────────────────────────────────
     # Sparse / BM25 retrieval
@@ -175,20 +174,7 @@ class Retriever:
         # Select the top_k indices without fully sorting every score.
         top_indices = heapq.nlargest(top_k, range(len(scores)), key=scores.__getitem__)
 
-        chunks = []
-        for idx in top_indices:
-            payload = all_chunks[idx]
-            chunks.append(
-                RetrievedChunk(
-                    content=payload.get("content", ""),
-                    file_path=payload.get("file_path", ""),
-                    start_line=payload.get("start_line", 0),
-                    end_line=payload.get("end_line", 0),
-                    file_type=payload.get("file_type", ""),
-                    score=float(scores[idx]),
-                )
-            )
-        return chunks
+        return [RetrievedChunk.from_payload(all_chunks[idx], float(scores[idx])) for idx in top_indices]
 
     # ─────────────────────────────────────────────────────────────────────────
     # Reciprocal Rank Fusion
@@ -220,17 +206,7 @@ class Retriever:
 
         sorted_keys = sorted(rrf_scores, key=lambda k: rrf_scores[k], reverse=True)
 
-        return [
-            RetrievedChunk(
-                content=chunk_map[k].content,
-                file_path=chunk_map[k].file_path,
-                start_line=chunk_map[k].start_line,
-                end_line=chunk_map[k].end_line,
-                file_type=chunk_map[k].file_type,
-                score=rrf_scores[k],
-            )
-            for k in sorted_keys
-        ]
+        return [replace(chunk_map[k], score=rrf_scores[k]) for k in sorted_keys]
 
     # ─────────────────────────────────────────────────────────────────────────
     # Cross-encoder reranking
@@ -241,20 +217,7 @@ class Retriever:
         request = RerankRequest(query=query, passages=passages)
         results = self._ranker.rerank(request)
 
-        reranked = []
-        for r in results[:top_k]:
-            original = candidates[r["id"]]
-            reranked.append(
-                RetrievedChunk(
-                    content=original.content,
-                    file_path=original.file_path,
-                    start_line=original.start_line,
-                    end_line=original.end_line,
-                    file_type=original.file_type,
-                    score=r["score"],
-                )
-            )
-        return reranked
+        return [replace(candidates[r["id"]], score=r["score"]) for r in results[:top_k]]
 
     # ─────────────────────────────────────────────────────────────────────────
     # Helpers

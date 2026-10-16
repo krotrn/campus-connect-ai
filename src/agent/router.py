@@ -73,6 +73,21 @@ def classify_route_fast(question: str) -> tuple[str, str, str] | None:
     return None
 
 
+def _parse_llm_route(text: str) -> tuple[str, str, str]:
+    """Parse the model's ROUTE/REASON/TARGET lines; anything unrecognised falls back to direct RAG."""
+    route, reason, target = "direct_rag", "LLM selected direct RAG.", ""
+    for line in text.splitlines():
+        key, _, value = line.strip().partition(":")
+        value = value.strip()
+        if key == "ROUTE" and value.lower() in ROUTES:
+            route = value.lower()
+        elif key == "REASON":
+            reason = value
+        elif key == "TARGET" and value.upper() != "NONE":
+            target = value
+    return route, reason, target
+
+
 def classify_route_llm(question: str, api_key: str | None = None) -> tuple[str, str, str]:
     """
     Uses Gemini LLM to classify ambiguous queries.
@@ -96,26 +111,7 @@ def classify_route_llm(question: str, api_key: str | None = None) -> tuple[str, 
                 automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
             ),
         )
-        text = response.text or ""
-
-        route = "direct_rag"
-        reason = "LLM selected direct RAG."
-        target = ""
-
-        for line in text.splitlines():
-            line = line.strip()
-            if line.startswith("ROUTE:"):
-                cand = line.split(":", 1)[1].strip().lower()
-                if cand in ROUTES:
-                    route = cand
-            elif line.startswith("REASON:"):
-                reason = line.split(":", 1)[1].strip()
-            elif line.startswith("TARGET:"):
-                cand_target = line.split(":", 1)[1].strip()
-                if cand_target.upper() != "NONE":
-                    target = cand_target
-
-        return (route, reason, target)
+        return _parse_llm_route(response.text or "")
     except Exception as e:
         logger.warning("LLM routing failed, defaulting to direct_rag: %s", e)
         return ("direct_rag", f"Routing fallback to direct_rag due to error: {str(e)}", "")
